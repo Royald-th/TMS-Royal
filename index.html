@@ -256,7 +256,14 @@ const LIFF_ID = '2009800535-CIkxLzEy'; // << เปลี่ยน
 // ════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════
-const S = { userId:null, token:null, driver:null, jobs:[], activeStop:null, gps:null };
+let STATE = {
+  userId: null,
+  accessToken: null,
+  driver: null,
+  jobs: [],
+  currentJobId: null,
+  gps: null
+};
 
 // ════════════════════════════════════════════
 //  INIT
