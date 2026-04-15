@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <title>TMS Driver — Multi-Stop</title>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root{
+      --bg:#0d1117; --sur:#161b22; --sur2:#21262d; --bdr:#30363d;
+      --grn:#00d26a; --grn-d:rgba(0,210,106,.12);
+      --red:#f78166; --red-d:rgba(247,129,102,.12);
+      --blu:#58a6ff; --blu-d:rgba(88,166,255,.12);
+      --ylw:#e3b341; --ylw-d:rgba(227,179,65,.12);
+      --prp:#bc8cff; --prp-d:rgba(188,140,255,.12);
+      --txt:#e6edf3; --mute:#8b949e;
+      --r:12px; --font:'Sarabun',sans-serif; --mono:'IBM Plex Mono',monospace;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--txt);font-family:var(--font);font-size:15px;min-height:100dvh;-webkit-font-smoothing:antialiased}
+
+    /* Loader */
+    #loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9999;transition:opacity .4s}
+    .spin{width:26px;height:26px;border:3px solid var(--bdr);border-top-color:var(--grn);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Shell */
+    #app{display:none;max-width:480px;margin:0 auto;padding-bottom:76px}
+
+    /* Topbar */
+    .topbar{position:sticky;top:0;z-index:100;background:rgba(13,17,23,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--bdr);padding:11px 16px;display:flex;align-items:center;gap:10px}
+    .tlogo{width:34px;height:34px;background:var(--grn-d);border:1.5px solid var(--grn);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+    .ttitle{font-weight:700;font-size:15px;line-height:1.2}
+    .tsub{font-size:11px;color:var(--mute)}
+    .tbadge{margin-left:auto;background:var(--grn-d);color:var(--grn);border:1px solid var(--grn);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;white-space:nowrap}
+
+    /* Bottom Nav */
+    .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(22,27,34,.95);backdrop-filter:blur(12px);border-top:1px solid var(--bdr);display:flex}
+    .bitem{flex:1;display:flex;flex-direction:column;align-items:center;padding:9px 0 12px;font-size:10px;color:var(--mute);cursor:pointer;transition:color .15s}
+    .bitem i{font-size:20px;margin-bottom:2px}
+    .bitem.active{color:var(--grn)}
+
+    /* Pages */
+    .page{display:none}.page.active{display:block}
+    .sec{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);padding:14px 16px 4px}
+
+    /* Job Card */
+    .jcard{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);margin:10px 16px 0;overflow:hidden;transition:border-color .2s}
+    .jcard-hd{background:var(--sur2);padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--bdr)}
+    .jcard-bd{padding:14px}
+    .job-id{font-family:var(--mono);font-size:11px;color:var(--mute);margin-left:auto}
+
+    /* Progress Stepper */
+    .stepper{display:flex;flex-direction:column;gap:0;padding:0 2px}
+    .step{display:flex;gap:12px;position:relative}
+    .step:not(:last-child)::before{content:'';position:absolute;left:15px;top:32px;bottom:-2px;width:2px;background:var(--bdr);z-index:0}
+    .step.s-done::before{background:var(--grn)}
+    .step.s-active::before{background:linear-gradient(var(--grn),var(--bdr))}
+
+    /* Step Node */
+    .step-node{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;z-index:1;border:2px solid var(--bdr);background:var(--sur2);color:var(--mute);transition:all .25s}
+    .s-done  .step-node{background:var(--grn-d);border-color:var(--grn);color:var(--grn)}
+    .s-active .step-node{background:var(--blu-d);border-color:var(--blu);color:var(--blu);box-shadow:0 0 0 4px rgba(88,166,255,.15)}
+    .s-wait  .step-node{opacity:.5}
+
+    /* Step Body */
+    .step-body{flex:1;padding-bottom:18px}
+    .step-label{font-size:13px;font-weight:600;color:var(--txt)}
+    .s-done  .step-label{color:var(--mute);text-decoration:line-through}
+    .s-active .step-label{color:var(--blu)}
+    .s-wait  .step-label{color:var(--mute)}
+    .step-addr{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.4}
+    .step-time{font-size:11px;color:var(--grn);margin-top:4px;font-family:var(--mono)}
+    .step-proof{width:100%;border-radius:8px;border:1px solid var(--bdr);margin-top:6px;max-height:160px;object-fit:cover;cursor:pointer}
+
+    /* Stop Action Buttons */
+    .stop-actions{display:flex;gap:8px;margin-top:8px}
+    .btn-sm-tms{flex:1;padding:8px 0;border-radius:9px;font-size:13px;font-weight:600;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .15s,transform .1s}
+    .btn-sm-tms:active{transform:scale(.97)}
+    .btn-arrive{background:var(--ylw-d);color:var(--ylw);border:1px solid var(--ylw)}
+    .btn-done  {background:var(--grn);color:#0d1117}
+    .btn-tms{width:100%;padding:11px;border-radius:10px;font-weight:600;font-size:14px;border:none;cursor:pointer;transition:opacity .15s,transform .1s;display:flex;align-items:center;justify-content:center;gap:8px}
+    .btn-tms:active{transform:scale(.97)}
+    .btn-start{background:var(--blu);color:#0d1117}
+    .btn-outline{background:transparent;border:1px solid var(--bdr)!important;color:var(--txt)}
+
+    /* Badges */
+    .badge-s{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid}
+    .bs-pending  {background:var(--ylw-d);color:var(--ylw);border-color:var(--ylw)}
+    .bs-inprog   {background:var(--blu-d);color:var(--blu);border-color:var(--blu)}
+    .bs-completed{background:var(--grn-d);color:var(--grn);border-color:var(--grn)}
+
+    /* Info rows */
+    .irow{display:flex;gap:8px;font-size:13px;color:var(--mute);margin-bottom:5px;align-items:flex-start}
+    .irow i{flex-shrink:0;margin-top:1px}
+    .irow span{color:var(--txt)}
+    .divider{height:1px;background:var(--bdr);margin:10px 0}
+
+    /* Progress Bar */
+    .prog-wrap{background:var(--bdr);border-radius:20px;height:6px;overflow:hidden;margin:8px 0 4px}
+    .prog-bar{height:100%;background:var(--grn);border-radius:20px;transition:width .5s ease}
+
+    /* Forms */
+    .flabel{font-size:11px;font-weight:700;color:var(--mute);margin-bottom:4px;display:block;letter-spacing:.04em;text-transform:uppercase}
+    .finput{background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;color:var(--txt);padding:9px 12px;font-size:14px;width:100%;outline:none;font-family:var(--font);transition:border-color .2s}
+    .finput:focus{border-color:var(--blu)}
+    .fgroup{margin-bottom:11px}
+
+    /* GPS Chip */
+    .gchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 12px;background:var(--sur2);border:1px solid var(--bdr);border-radius:20px;color:var(--mute)}
+    .gchip.ok{border-color:var(--grn);color:var(--grn)}
+    .gchip.err{border-color:var(--red);color:var(--red)}
+
+    /* Empty */
+    .empty{text-align:center;padding:56px 24px;color:var(--mute)}
+    .empty i{font-size:44px;color:var(--bdr);display:block;margin-bottom:10px}
+
+    /* Profile */
+    .avatar{width:68px;height:68px;border-radius:50%;border:2px solid var(--grn);object-fit:cover;background:var(--sur2)}
+
+    /* Toast */
+    .toast-wrap{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:448px;z-index:9000}
+    .toast-t{background:var(--sur2);border:1px solid var(--bdr);border-radius:12px;padding:11px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.5);margin-bottom:8px;animation:sup .22s ease}
+    @keyframes sup{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+    .toast-t.success{border-color:var(--grn)}.toast-t.error{border-color:var(--red)}
+
+    /* Modal */
+    .msheet{background:var(--sur);border:1px solid var(--bdr);border-radius:16px 16px 0 0;color:var(--txt)}
+    #imgPreview{width:100%;border-radius:9px;border:1px solid var(--bdr);display:none;margin-top:8px;max-height:200px;object-fit:cover}
+
+    /* Job complete banner */
+    .done-banner{background:var(--grn-d);border:1px solid var(--grn);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-top:10px}
+  </style>
+</head>
+<body>
+
+<!-- Loader -->
+<div id="loader">
+  <div style="width:52px;height:52px;background:var(--grn-d);border:2px solid var(--grn);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px">🚚</div>
+  <div class="spin"></div>
+  <div style="font-size:12px;color:var(--mute)">กำลังโหลด...</div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="topbar">
+    <div class="tlogo">🚚</div>
+    <div><div class="ttitle">TMS Driver</div><div class="tsub" id="topSub">Multi-Stop System</div></div>
+    <div class="tbadge" id="jobBadge">0 งาน</div>
+  </div>
+
+  <!-- PAGE: Jobs -->
+  <div class="page active" id="pageJobs">
+    <div class="sec">งานที่รอดำเนินการ</div>
+    <div id="jobList"></div>
+  </div>
+
+  <!-- PAGE: Profile -->
+  <div class="page" id="pageProfile">
+    <div style="padding:18px 16px">
+      <div class="jcard" style="margin:0">
+        <div class="jcard-bd" style="text-align:center;padding:22px">
+          <img id="profAvatar" class="avatar" src="" alt="avatar"/>
+          <div style="font-size:19px;font-weight:700;margin-top:9px" id="profName">-</div>
+          <div style="font-size:13px;color:var(--mute);margin-top:3px" id="profPhone">-</div>
+          <div style="font-size:13px;color:var(--mute);margin-top:2px" id="profVehicle">-</div>
+        </div>
+      </div>
+      <div class="sec" style="padding:14px 0 4px">LINE User ID</div>
+      <div class="jcard" style="margin:0"><div class="jcard-bd" style="font-family:var(--mono);font-size:11px;color:var(--mute);word-break:break-all" id="profUid">-</div></div>
+      <button class="btn-tms btn-outline mt-3" onclick="handleLogout()"><i class="bi bi-box-arrow-right"></i> ออกจากระบบ</button>
+    </div>
+  </div>
+
+  <!-- PAGE: Register -->
+  <div class="page" id="pageRegister">
+    <div style="padding:20px 16px">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:38px">🪪</div>
+        <div style="font-size:18px;font-weight:700;margin-top:6px">ลงทะเบียนคนขับ</div>
+        <div style="font-size:13px;color:var(--mute)">กรอกข้อมูลเพื่อเริ่มใช้งาน</div>
+      </div>
+      <div class="fgroup"><label class="flabel">ชื่อ-นามสกุล</label><input class="finput" id="rName" placeholder="ชื่อ-นามสกุล"/></div>
+      <div class="fgroup"><label class="flabel">เบอร์โทรศัพท์</label><input class="finput" id="rPhone" type="tel" placeholder="08x-xxx-xxxx"/></div>
+      <div class="fgroup">
+        <label class="flabel">ประเภทยานพาหนะ</label>
+        <select class="finput" id="rVType">
+          <option value="">-- เลือกประเภท --</option>
+          <option>รถกระบะ</option><option>รถตู้</option>
+          <option>รถบรรทุก 4 ล้อ</option><option>รถบรรทุก 6 ล้อ</option><option>รถบรรทุก 10 ล้อ</option>
+        </select>
+      </div>
+      <div class="fgroup"><label class="flabel">ทะเบียนรถ</label><input class="finput" id="rPlate" placeholder="กข 1234 กรุงเทพ"/></div>
+      <button class="btn-tms btn-start mt-2" id="btnReg" onclick="doRegister()"><i class="bi bi-person-check-fill"></i> ลงทะเบียน</button>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <div class="bnav" id="bnav">
+    <div class="bitem active" onclick="switchPage('jobs')"><i class="bi bi-list-task"></i>งาน</div>
+    <div class="bitem" onclick="switchPage('profile')"><i class="bi bi-person-circle"></i>โปรไฟล์</div>
+  </div>
+</div>
+
+<!-- ── Modal: Complete Stop ── -->
+<div class="modal fade" id="stopModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" style="margin:0;position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto">
+    <div class="modal-content msheet">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-weight:700;font-size:15px">✅ ส่งสำเร็จที่จุดนี้</div>
+          <div style="font-size:12px;color:var(--mute)" id="stopModalSub">จุดที่ -</div>
+        </div>
+        <button class="btn-tms btn-outline" style="width:auto;padding:6px 12px;font-size:13px" data-bs-dismiss="modal">ยกเลิก</button>
+      </div>
+      <div style="padding:14px;max-height:65dvh;overflow-y:auto">
+        <div class="fgroup">
+          <label class="flabel">📸 รูปหลักฐาน <span style="color:var(--red)">*</span></label>
+          <input type="file" class="finput" id="proofImg" accept="image/*" capture="environment" onchange="previewImg(event)"/>
+          <img id="imgPreview" alt="preview"/>
+        </div>
+        <div class="fgroup">
+          <label class="flabel">📍 GPS</label>
+          <div id="gpsChip" class="gchip"><div class="spin" style="width:11px;height:11px;border-width:2px"></div> ระบุตำแหน่ง...</div>
+        </div>
+        <div class="fgroup">
+          <label class="flabel">หมายเหตุ</label>
+          <textarea class="finput" id="stopNote" rows="2" placeholder="หมายเหตุ (ถ้ามี)..."></textarea>
+        </div>
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--bdr)">
+        <button class="btn-tms btn-start" id="btnConfirmStop" onclick="submitStop()">
+          <i class="bi bi-check-lg"></i> ยืนยันส่งสำเร็จ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ════════════════════════════════════════════
+//  CONFIG  — แก้ค่าด้านล่างนี้
+// ════════════════════════════════════════════
+const GAS_URL = 'https://script.google.com/macros/s/YOUR_GAS_DEPLOYMENT_ID/exec'; // << เปลี่ยน
+const LIFF_ID = 'YOUR_LIFF_ID'; // << เปลี่ยน
+
+// ════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════
+const S = { userId:null, token:null, driver:null, jobs:[], activeStop:null, gps:null };
+
+// ════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════
+async function initApp() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+
+    S.token  = liff.getAccessToken();
+    const p  = await liff.getProfile();
+    S.userId = p.userId;
+
+    document.getElementById('profAvatar').src = p.pictureUrl || '';
+    document.getElementById('profUid').textContent = S.userId;
+
+    const r = await gasGet('getDriver', { userId: S.userId });
+    if (r.status !== 'success') throw new Error(r.message);
+
+    if (!r.driver) { showPage('register'); hideLoader(); return; }
+
+    S.driver = r.driver;
+    renderProfile();
+    await loadJobs();
+    showPage('jobs');
+    hideLoader();
+  } catch(e) { toast('เกิดข้อผิดพลาด: '+e.message,'error'); hideLoader(); }
+}
+
+// ════════════════════════════════════════════
+//  API
+// ════════════════════════════════════════════
+async function gasGet(action, params={}) {
+  const u = new URL(GAS_URL);
+  u.searchParams.set('action', action);
+  u.searchParams.set('accessToken', S.token);
+  Object.entries(params).forEach(([k,v]) => u.searchParams.set(k,v));
+  return (await fetch(u.toString())).json();
+}
+async function gasPost(action, body={}) {
+  return (await fetch(GAS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ action, userId:S.userId, accessToken:S.token, ...body })
+  })).json();
+}
+
+// ════════════════════════════════════════════
+//  LOAD & RENDER JOBS
+// ════════════════════════════════════════════
+async function loadJobs() {
+  const r = await gasGet('getJobs',{userId:S.userId});
+  if (r.status!=='success'){toast(r.message,'error');return;}
+  S.jobs = r.jobs;
+  renderJobs();
+}
+
+function renderJobs() {
+  const el = document.getElementById('jobList');
+  document.getElementById('jobBadge').textContent = S.jobs.length + ' งาน';
+
+  if (!S.jobs.length) {
+    el.innerHTML = `<div class="empty"><i class="bi bi-inbox"></i><div style="font-weight:600">ยังไม่มีงาน</div><div style="font-size:13px;margin-top:4px">งานใหม่จะปรากฏที่นี่</div></div>`;
+    return;
+  }
+
+  el.innerHTML = S.jobs.map(job => {
+    const stops    = job.stops || [];
+    const total    = stops.length;
+    const done     = stops.filter(s => s.Status === 'Completed').length;
+    const pct      = total ? Math.round(done/total*100) : 0;
+    const isPending = job.Status === 'Pending';
+    const statusCls = isPending ? 'bs-pending' : 'bs-inprog';
+    const statusLbl = isPending ? '⏳ รอออกรถ'  : '🚚 กำลังวิ่ง';
+
+    return `
+    <div class="jcard">
+      <div class="jcard-hd">
+        <span class="badge-s ${statusCls}">${statusLbl}</span>
+        <span class="job-id">#${job.Job_ID}</span>
+      </div>
+      <div class="jcard-bd">
+        ${job.Note?`<div class="irow"><i class="bi bi-chat-left-text"></i><span>${job.Note}</span></div>`:''}
+        ${job.Scheduled_Time?`<div class="irow"><i class="bi bi-clock"></i><span>${job.Scheduled_Time}</span></div>`:''}
+
+        <!-- Progress -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+          <span style="font-size:11px;color:var(--mute)">ความคืบหน้า</span>
+          <span style="font-size:11px;font-family:var(--mono);color:${done===total?'var(--grn)':'var(--blu)'}">${done}/${total} จุด</span>
+        </div>
+        <div class="prog-wrap"><div class="prog-bar" style="width:${pct}%"></div></div>
+
+        <div class="divider"></div>
+
+        <!-- Stepper -->
+        <div class="stepper">${renderStepper(stops, job.Job_ID)}</div>
+
+        <div class="divider"></div>
+
+        <!-- Job-level action -->
+        ${isPending
+          ? `<button class="btn-tms btn-start" onclick="doStartJob('${job.Job_ID}',this)"><i class="bi bi-play-fill"></i> ออกรถเริ่มงาน</button>`
+          : ''
+        }
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStepper(stops, jobId) {
+  return stops.map((s, i) => {
+    const isDone   = s.Status === 'Completed';
+    const isActive = s.Status === 'In Progress' || s.Status === 'Arrived';
+    const isWait   = !isDone && !isActive;
+    const cls      = isDone ? 's-done' : isActive ? 's-active' : 's-wait';
+    const nodeIcon = isDone ? '<i class="bi bi-check-lg"></i>' : s.Stop_Order;
+
+    const arriveBtn = isActive && s.Status === 'In Progress'
+      ? `<button class="btn-sm-tms btn-arrive" onclick="doArriveStop('${jobId}','${s.Stop_ID}',this)"><i class="bi bi-geo-alt-fill"></i> ถึงจุดแล้ว</button>`
+      : '';
+
+    const doneBtn = isActive
+      ? `<button class="btn-sm-tms btn-done" onclick="openStopModal('${jobId}','${s.Stop_ID}','${s.Stop_Order}','${(s.Address||'').replace(/'/g,"\\'")}')"><i class="bi bi-check-circle-fill"></i> ส่งสำเร็จ</button>`
+      : '';
+
+    const proof = s.Proof_Image_URL
+      ? `<img class="step-proof" src="${s.Proof_Image_URL}" alt="proof" onclick="window.open('${s.Proof_Image_URL}','_blank')"/>`
+      : '';
+
+    const time = s.Complete_Time
+      ? `<div class="step-time"><i class="bi bi-check2-circle"></i> ${s.Complete_Time}</div>`
+      : s.Arrive_Time ? `<div class="step-time" style="color:var(--ylw)"><i class="bi bi-clock-history"></i> ถึง ${s.Arrive_Time}</div>` : '';
+
+    return `
+    <div class="step ${cls}">
+      <div class="step-node">${nodeIcon}</div>
+      <div class="step-body">
+        <div class="step-label">จุดที่ ${s.Stop_Order}: ${s.Recipient_Name||''}</div>
+        <div class="step-addr">${s.Address||'-'}</div>
+        ${s.Phone ? `<div class="step-addr"><i class="bi bi-telephone"></i> ${s.Phone}</div>` : ''}
+        ${s.Note  ? `<div class="step-addr" style="color:var(--ylw)"><i class="bi bi-sticky"></i> ${s.Note}</div>` : ''}
+        ${time}
+        ${proof}
+        ${(arriveBtn||doneBtn) ? `<div class="stop-actions">${arriveBtn}${doneBtn}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════
+//  ACTION: Start Job
+// ════════════════════════════════════════════
+async function doStartJob(jobId, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:15px;height:15px;border-width:2px"></div> ระบุ GPS...';
+  try {
+    const gps = await getGPS();
+    btn.innerHTML = '<div class="spin" style="width:15px;height:15px;border-width:2px"></div> กำลังบันทึก...';
+    const r = await gasPost('startJob',{jobId, latitude:gps.lat, longitude:gps.lng});
+    if(r.status!=='success') throw new Error(r.message);
+    toast(`✅ ออกรถงาน #${jobId} แล้ว!`,'success');
+    await loadJobs();
+  } catch(e) {
+    toast('❌ '+e.message,'error');
+    btn.disabled=false;
+    btn.innerHTML='<i class="bi bi-play-fill"></i> ออกรถเริ่มงาน';
+  }
+}
+
+// ════════════════════════════════════════════
+//  ACTION: Arrive Stop
+// ════════════════════════════════════════════
+async function doArriveStop(jobId, stopId, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:11px;height:11px;border-width:2px"></div>';
+  try {
+    const gps = await getGPS();
+    const r   = await gasPost('arriveStop',{jobId, stopId, latitude:gps.lat, longitude:gps.lng});
+    if(r.status!=='success') throw new Error(r.message);
+    toast('📍 บันทึกการถึงจุดแล้ว','success');
+    await loadJobs();
+  } catch(e) {
+    toast('❌ '+e.message,'error');
+    btn.disabled=false;
+    btn.innerHTML='<i class="bi bi-geo-alt-fill"></i> ถึงจุดแล้ว';
+  }
+}
+
+// ════════════════════════════════════════════
+//  MODAL: Complete Stop
+// ════════════════════════════════════════════
+function openStopModal(jobId, stopId, order, address) {
+  S.activeStop = { jobId, stopId, order, address };
+  S.gps = null;
+
+  document.getElementById('stopModalSub').textContent = `จุดที่ ${order}: ${address}`;
+  document.getElementById('proofImg').value = '';
+  document.getElementById('imgPreview').style.display = 'none';
+  document.getElementById('stopNote').value = '';
+
+  const chip = document.getElementById('gpsChip');
+  chip.className = 'gchip';
+  chip.innerHTML = '<div class="spin" style="width:11px;height:11px;border-width:2px"></div> ระบุตำแหน่ง...';
+
+  getGPS().then(g => {
+    S.gps = g;
+    chip.className = 'gchip ok';
+    chip.innerHTML = `<i class="bi bi-geo-alt-fill"></i> ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}`;
+  }).catch(() => {
+    chip.className = 'gchip err';
+    chip.innerHTML = '<i class="bi bi-exclamation-circle"></i> ระบุ GPS ไม่ได้';
+  });
+
+  new bootstrap.Modal(document.getElementById('stopModal')).show();
+}
+
+async function submitStop() {
+  if (!S.gps)    { toast('❌ รอ GPS ก่อน','error'); return; }
+  const fi = document.getElementById('proofImg');
+  if (!fi.files.length) { toast('❌ กรุณาถ่ายรูปหลักฐาน','error'); return; }
+
+  const btn = document.getElementById('btnConfirmStop');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:15px;height:15px;border-width:2px"></div> กำลังอัปโหลด...';
+
+  try {
+    const {base64, mimeType} = await resizeEncode(fi.files[0], 1200, .75);
+    const r = await gasPost('completeStop',{
+      jobId    : S.activeStop.jobId,
+      stopId   : S.activeStop.stopId,
+      latitude : S.gps.lat,
+      longitude: S.gps.lng,
+      imageBase64: base64,
+      imageMimeType: mimeType,
+      note     : document.getElementById('stopNote').value,
+    });
+    if (r.status!=='success') throw new Error(r.message);
+
+    bootstrap.Modal.getInstance(document.getElementById('stopModal')).hide();
+
+    if (r.jobCompleted) {
+      toast('🎉 งานเสร็จสมบูรณ์ทุกจุด!','success');
+    } else {
+      const next = r.nextStop;
+      toast(`✅ ส่งจุดที่ ${S.activeStop.order} สำเร็จ${next?` → จุดถัดไป: ${next.address}`:''}`, 'success');
+    }
+    await loadJobs();
+  } catch(e) {
+    toast('❌ '+e.message,'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i> ยืนยันส่งสำเร็จ';
+  }
+}
+
+// ════════════════════════════════════════════
+//  REGISTER
+// ════════════════════════════════════════════
+async function doRegister() {
+  const name=document.getElementById('rName').value.trim();
+  const phone=document.getElementById('rPhone').value.trim();
+  const vt=document.getElementById('rVType').value;
+  const plate=document.getElementById('rPlate').value.trim();
+  if(!name||!phone||!vt||!plate){toast('❌ กรอกข้อมูลให้ครบ','error');return;}
+  const btn=document.getElementById('btnReg');
+  btn.disabled=true;
+  btn.innerHTML='<div class="spin" style="width:15px;height:15px;border-width:2px"></div> กำลังลงทะเบียน...';
+  try {
+    const r=await gasPost('registerDriver',{name,phone,vehicleType:vt,vehiclePlate:plate});
+    if(r.status!=='success') throw new Error(r.message);
+    toast('✅ ลงทะเบียนสำเร็จ!','success');
+    setTimeout(()=>location.reload(),1000);
+  } catch(e){
+    toast('❌ '+e.message,'error');
+    btn.disabled=false;
+    btn.innerHTML='<i class="bi bi-person-check-fill"></i> ลงทะเบียน';
+  }
+}
+
+// ════════════════════════════════════════════
+//  GPS
+// ════════════════════════════════════════════
+function getGPS(){
+  return new Promise((res,rej)=>{
+    if(!navigator.geolocation){rej(new Error('ไม่รองรับ GPS'));return;}
+    navigator.geolocation.getCurrentPosition(
+      p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),
+      e=>rej(new Error('GPS error code:'+e.code)),
+      {enableHighAccuracy:true,timeout:12000}
+    );
+  });
+}
+
+// ════════════════════════════════════════════
+//  IMAGE RESIZE (Canvas API) + Base64
+// ════════════════════════════════════════════
+function resizeEncode(file,maxW,q){
+  return new Promise((res,rej)=>{
+    const rd=new FileReader();
+    rd.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+        const c=document.createElement('canvas');
+        c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        const dataUrl=c.toDataURL('image/jpeg',q);
+        res({base64:dataUrl.split(',')[1],mimeType:'image/jpeg'});
+      };
+      img.onerror=rej;
+      img.src=e.target.result;
+    };
+    rd.onerror=rej;
+    rd.readAsDataURL(file);
+  });
+}
+
+function previewImg(e){
+  const f=e.target.files[0];if(!f)return;
+  const p=document.getElementById('imgPreview');
+  p.src=URL.createObjectURL(f);p.style.display='block';
+}
+
+// ════════════════════════════════════════════
+//  PROFILE
+// ════════════════════════════════════════════
+function renderProfile(){
+  const d=S.driver;if(!d)return;
+  document.getElementById('profName').textContent=d.Name||'-';
+  document.getElementById('profPhone').textContent='📞 '+(d.Phone||'-');
+  document.getElementById('profVehicle').textContent='🚚 '+(d.Vehicle_Type||'')+' | '+(d.Vehicle_Plate||'');
+  document.getElementById('topSub').textContent=d.Name||'';
+}
+function handleLogout(){if(liff.isLoggedIn())liff.logout();location.reload();}
+
+// ════════════════════════════════════════════
+//  UI
+// ════════════════════════════════════════════
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('bnav').style.display = name==='register'?'none':'flex';
+  const map={jobs:'pageJobs',profile:'pageProfile',register:'pageRegister'};
+  document.getElementById(map[name]).classList.add('active');
+  document.querySelectorAll('.bitem').forEach((el,i)=>
+    el.classList.toggle('active',(name==='jobs'&&i===0)||(name==='profile'&&i===1))
+  );
+}
+function switchPage(name){showPage(name);if(name==='jobs')loadJobs();}
+function hideLoader(){
+  const l=document.getElementById('loader');
+  l.style.opacity='0';
+  setTimeout(()=>{l.style.display='none';document.getElementById('app').style.display='block';},400);
+}
+function toast(msg,type='success'){
+  const w=document.getElementById('toastWrap');
+  const t=document.createElement('div');
+  t.className='toast-t '+type;
+  t.innerHTML=`<span>${type==='success'?'✅':'❌'}</span><span>${msg}</span>`;
+  w.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},3800);
+}
+
+window.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
