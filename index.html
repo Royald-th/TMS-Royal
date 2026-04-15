@@ -256,14 +256,7 @@ const LIFF_ID = '2009800535-CIkxLzEy'; // << เปลี่ยน
 // ════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════
-let STATE = {
-  userId: null,
-  accessToken: null,
-  driver: null,
-  jobs: [],
-  currentJobId: null,
-  gps: null
-};
+const S = { userId:null, token:null, driver:null, jobs:[], activeStop:null, gps:null };
 
 // ════════════════════════════════════════════
 //  INIT
@@ -300,29 +293,34 @@ async function gasGet(action, params={}) {
   const u = new URL(GAS_URL);
   u.searchParams.set('action', action);
   u.searchParams.set('accessToken', S.token);
+  u.searchParams.set('userId', S.userId); // เพิ่ม userId เข้าไปด้วย
   Object.entries(params).forEach(([k,v]) => u.searchParams.set(k,v));
-  return (await fetch(u.toString())).json();
+  
+  const res = await fetch(u.toString());
+  return res.json();
 }
-async function gasPost(action, body = {}) {
-  // สร้างฟอร์มเสมือนเพื่อให้เป็น Simple Request (ไม่ติด CORS Preflight)
-  const payload = JSON.stringify({ 
+
+async function gasPost(action, body={}) {
+  // สร้าง Payload โดยใช้ตัวแปร S ที่คุณประกาศไว้ข้างบน
+  const payload = { 
     action, 
-    userId: STATE.userId, 
-    accessToken: STATE.accessToken, 
+    userId: S.userId, 
+    accessToken: S.token, 
     ...body 
-  });
+  };
 
   const res = await fetch(GAS_URL, {
     method: 'POST',
-    mode: 'no-cors', // เพิ่มตรงนี้หากยังไม่ได้ผล แต่ข้อมูลอาจไม่กลับมา
-    headers: { 
-      // 'Content-Type': 'application/json'  <-- ลองปิดบรรทัดนี้หากพัง
+    mode: 'cors', // มั่นใจว่าเปิด cors
+    headers: {
+      // พยายามไม่ใส่ Content-Type: application/json เพื่อเลี่ยง Preflight ในบางเคส
+      // หรือถ้าใส่ ต้องมั่นใจว่าฝั่ง GAS handle OPTIONS ได้
+      'Content-Type': 'text/plain;charset=utf-8' 
     },
-    body: payload
+    body: JSON.stringify(payload)
   });
   
-  // หมายเหตุ: ถ้าใช้ mode: 'no-cors' คุณจะไม่สามารถอ่าน response ได้
-  // ดังนั้นวิธีที่ดีกว่าคือการจัดโครงสร้าง Code.gs ใหม่ (ดูข้อ 2)
+  return res.json();
 }
 
 // ════════════════════════════════════════════
