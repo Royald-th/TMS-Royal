@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>TMS Admin Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root{
+      --bg:#0a0e17; --sur:#111827; --sur2:#1c2333; --sur3:#242f45;
+      --bdr:#2d3748; --bdr2:#3d4d6a;
+      --grn:#10b981; --grn-d:rgba(16,185,129,.1); --grn-b:rgba(16,185,129,.2);
+      --red:#f87171; --red-d:rgba(248,113,113,.1); --red-b:rgba(248,113,113,.2);
+      --blu:#60a5fa; --blu-d:rgba(96,165,250,.1); --blu-b:rgba(96,165,250,.2);
+      --ylw:#fbbf24; --ylw-d:rgba(251,191,36,.1);
+      --prp:#a78bfa; --prp-d:rgba(167,139,250,.1);
+      --txt:#e2e8f0; --sub:#94a3b8; --mute:#64748b;
+      --r:10px; --font:'Sarabun',sans-serif; --mono:'IBM Plex Mono',monospace;
+      --sidebar:240px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--txt);font-family:var(--font);font-size:14px;height:100vh;overflow:hidden}
+
+    /* ── Login Screen ── */
+    #loginScreen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .login-card{background:var(--sur);border:1px solid var(--bdr);border-radius:16px;padding:36px 32px;width:360px;text-align:center}
+    .login-logo{width:64px;height:64px;background:var(--grn-d);border:2px solid var(--grn);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px}
+
+    /* ── Layout ── */
+    #shell{display:none;height:100vh;display:flex}
+    .sidebar{width:var(--sidebar);background:var(--sur);border-right:1px solid var(--bdr);display:flex;flex-direction:column;flex-shrink:0}
+    .main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+    .main-content{flex:1;overflow-y:auto;padding:20px 24px}
+
+    /* ── Sidebar ── */
+    .sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px}
+    .sb-logo-icon{width:32px;height:32px;background:var(--grn-d);border:1.5px solid var(--grn);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+    .sb-title{font-weight:700;font-size:14px}
+    .sb-sub{font-size:10px;color:var(--mute)}
+    .sb-nav{padding:12px 8px;flex:1}
+    .sb-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;color:var(--sub);font-size:13px;font-weight:500;transition:all .15s;margin-bottom:2px}
+    .sb-item:hover{background:var(--sur2);color:var(--txt)}
+    .sb-item.active{background:var(--grn-d);color:var(--grn);border:1px solid var(--grn-b)}
+    .sb-item i{font-size:16px;width:18px;text-align:center}
+    .sb-footer{padding:12px 8px;border-top:1px solid var(--bdr)}
+
+    /* ── Topbar ── */
+    .topbar{background:var(--sur);border-bottom:1px solid var(--bdr);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+    .page-title{font-size:16px;font-weight:700}
+    .topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+    /* ── Stats Cards ── */
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}
+    .stat-card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px}
+    .stat-val{font-size:26px;font-weight:700;line-height:1;font-family:var(--mono)}
+    .stat-lbl{font-size:11px;color:var(--sub);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+    .stat-icon{font-size:20px;float:right;margin-top:-2px;opacity:.6}
+
+    /* ── Table ── */
+    .tbl-wrap{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden}
+    .tbl-head{padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px}
+    table{width:100%;border-collapse:collapse}
+    th{background:var(--sur2);padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;border-bottom:1px solid var(--bdr)}
+    td{padding:10px 14px;border-bottom:1px solid var(--bdr);font-size:13px;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:rgba(255,255,255,.02)}
+    .td-mono{font-family:var(--mono);font-size:12px}
+    .td-mute{color:var(--sub)}
+
+    /* ── Badges ── */
+    .badge-s{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+    .b-pending  {background:var(--ylw-d);color:var(--ylw);border-color:var(--ylw)}
+    .b-inprog   {background:var(--blu-d);color:var(--blu);border-color:var(--blu)}
+    .b-done     {background:var(--grn-d);color:var(--grn);border-color:var(--grn)}
+    .b-gps-ok   {background:var(--grn-d);color:var(--grn);border-color:var(--grn)}
+    .b-gps-warn {background:var(--red-d);color:var(--red);border-color:var(--red)}
+    .b-gps-na   {background:var(--sur2);color:var(--mute);border-color:var(--bdr)}
+
+    /* ── Buttons ── */
+    .btn-p{background:var(--grn);color:#000;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:opacity .15s}
+    .btn-p:hover{opacity:.85}
+    .btn-sec{background:var(--sur2);color:var(--txt);border:1px solid var(--bdr);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+    .btn-sec:hover{border-color:var(--bdr2)}
+    .btn-danger{background:var(--red-d);color:var(--red);border:1px solid var(--red-b);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
+    .btn-danger:hover{background:var(--red-b)}
+    .btn-icon{background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:5px 8px;cursor:pointer;font-size:13px;color:var(--sub);display:inline-flex;align-items:center}
+    .btn-icon:hover{color:var(--txt);border-color:var(--bdr2)}
+    .btn-sm-p{background:var(--grn);color:#000;border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+
+    /* ── Forms ── */
+    .finput{background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;color:var(--txt);padding:8px 12px;font-size:13px;width:100%;outline:none;font-family:var(--font);transition:border-color .2s}
+    .finput:focus{border-color:var(--blu)}
+    .flabel{font-size:11px;font-weight:700;color:var(--sub);margin-bottom:4px;display:block;text-transform:uppercase;letter-spacing:.04em}
+    .fgroup{margin-bottom:12px}
+
+    /* ── Modal ── */
+    .modal-content{background:var(--sur);border:1px solid var(--bdr);border-radius:14px;color:var(--txt)}
+    .modal-header{border-bottom:1px solid var(--bdr);padding:14px 18px}
+    .modal-footer{border-top:1px solid var(--bdr);padding:12px 18px}
+    .modal-body{padding:18px}
+    .btn-close{filter:invert(1) opacity(.5)}
+
+    /* ── Stop Builder ── */
+    .stop-item{background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:12px;margin-bottom:8px;position:relative}
+    .stop-num{width:24px;height:24px;background:var(--grn-d);border:1.5px solid var(--grn);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--grn);flex-shrink:0}
+    .stop-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+    /* ── Job Detail Panel ── */
+    .detail-panel{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);margin-top:16px}
+    .detail-head{padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px}
+    .detail-body{padding:16px}
+
+    /* ── GPS Card ── */
+    .gps-card{background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:12px 14px;margin-top:8px}
+    .gps-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);margin-bottom:4px}
+    .gps-row:last-child{margin-bottom:0}
+    .gps-val{color:var(--txt);font-family:var(--mono)}
+    .gps-dist-ok  {color:var(--grn);font-weight:700}
+    .gps-dist-warn{color:var(--red);font-weight:700}
+
+    /* ── Progress ── */
+    .prog-wrap{background:var(--bdr);border-radius:20px;height:5px;overflow:hidden}
+    .prog-bar{height:100%;background:var(--grn);border-radius:20px;transition:width .4s ease}
+
+    /* ── Proof image ── */
+    .proof-thumb{width:64px;height:64px;border-radius:7px;object-fit:cover;cursor:pointer;border:1px solid var(--bdr);transition:transform .2s}
+    .proof-thumb:hover{transform:scale(1.05)}
+
+    /* ── Filter bar ── */
+    .filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+    .filter-btn{background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:5px 12px;font-size:12px;color:var(--sub);cursor:pointer}
+    .filter-btn.active{background:var(--grn-d);color:var(--grn);border-color:var(--grn)}
+
+    /* ── Spin ── */
+    .spin{width:16px;height:16px;border:2px solid var(--bdr);border-top-color:var(--grn);border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Toast ── */
+    .toast-wrap{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .toast-t{background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:10px 16px;display:flex;gap:10px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:tin .2s ease;pointer-events:all;min-width:260px}
+    @keyframes tin{from{transform:translateX(20px);opacity:0}}
+    .toast-t.success{border-color:var(--grn)}.toast-t.error{border-color:var(--red)}.toast-t.warn{border-color:var(--ylw)}
+
+    /* ── Empty ── */
+    .empty-state{text-align:center;padding:48px 20px;color:var(--mute)}
+    .empty-state i{font-size:40px;display:block;margin-bottom:10px;color:var(--bdr2)}
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px}
+
+    /* Responsive */
+    @media(max-width:768px){
+      .sidebar{display:none}
+      .main-content{padding:14px}
+      .stats-grid{grid-template-columns:1fr 1fr}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">🚚</div>
+    <div style="font-size:20px;font-weight:700;margin-bottom:4px">TMS Admin</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:24px">Transportation Management System</div>
+    <div class="fgroup" style="text-align:left">
+      <label class="flabel">Admin Password</label>
+      <input class="finput" type="password" id="loginPwd" placeholder="กรอกรหัสผ่าน" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="btn-p" style="width:100%;justify-content:center;padding:10px" id="btnLogin" onclick="doLogin()">
+      <i class="bi bi-box-arrow-in-right"></i> เข้าสู่ระบบ
+    </button>
+    <div id="loginErr" style="color:var(--red);font-size:12px;margin-top:10px;display:none">รหัสผ่านไม่ถูกต้อง</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MAIN SHELL
+══════════════════════════════════════ -->
+<div id="shell" style="display:none">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-icon">🚚</div>
+      <div><div class="sb-title">TMS Admin</div><div class="sb-sub">v3.0</div></div>
+    </div>
+    <div class="sb-nav">
+      <div class="sb-item active" onclick="switchView('dashboard')" id="nav-dashboard"><i class="bi bi-grid-1x2-fill"></i> Dashboard</div>
+      <div class="sb-item" onclick="switchView('jobs')"      id="nav-jobs"><i class="bi bi-list-task"></i> จัดการงาน</div>
+      <div class="sb-item" onclick="switchView('drivers')"   id="nav-drivers"><i class="bi bi-people-fill"></i> คนขับ</div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-item" onclick="doLogout()"><i class="bi bi-box-arrow-left"></i> ออกจากระบบ</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="page-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-right">
+        <button class="btn-sec" onclick="refreshData()"><i class="bi bi-arrow-clockwise"></i> รีเฟรช</button>
+        <button class="btn-p" id="btnNewJob" onclick="openCreateModal()" style="display:none"><i class="bi bi-plus-lg"></i> สร้างงานใหม่</button>
+      </div>
+    </div>
+
+    <div class="main-content">
+
+      <!-- ── View: Dashboard ── -->
+      <div id="viewDashboard">
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="tbl-wrap">
+          <div class="tbl-head">
+            <i class="bi bi-clock-history" style="color:var(--ylw)"></i>
+            <span style="font-weight:600">งานล่าสุด</span>
+          </div>
+          <div id="recentTable"><div class="empty-state"><div class="spin"></div></div></div>
+        </div>
+      </div>
+
+      <!-- ── View: Jobs ── -->
+      <div id="viewJobs" style="display:none">
+        <div class="filter-bar">
+          <button class="filter-btn active" onclick="setFilter('all',this)">ทั้งหมด</button>
+          <button class="filter-btn" onclick="setFilter('Pending',this)">⏳ รอออกรถ</button>
+          <button class="filter-btn" onclick="setFilter('In Progress',this)">🚚 กำลังวิ่ง</button>
+          <button class="filter-btn" onclick="setFilter('Completed',this)">✅ เสร็จสิ้น</button>
+          <input class="finput" id="jobSearch" placeholder="🔍 ค้นหา Job ID / คนขับ..." style="width:220px;padding:5px 10px" oninput="renderJobTable()"/>
+        </div>
+        <div class="tbl-wrap">
+          <div id="jobTable"><div class="empty-state"><div class="spin"></div></div></div>
+        </div>
+      </div>
+
+      <!-- ── View: Drivers ── -->
+      <div id="viewDrivers" style="display:none">
+        <div class="tbl-wrap">
+          <div id="driverTable"><div class="empty-state"><div class="spin"></div></div></div>
+        </div>
+      </div>
+
+    </div><!-- /main-content -->
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<!-- ══════════════════════════════════════
+     MODAL: Create Job
+══════════════════════════════════════ -->
+<div class="modal fade" id="createModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle-fill" style="color:var(--grn)"></i> สร้างงานใหม่</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Job Info -->
+        <div style="background:var(--sur2);border-radius:9px;padding:14px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">ข้อมูลงาน</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fgroup">
+              <label class="flabel">คนขับ <span style="color:var(--red)">*</span></label>
+              <select class="finput" id="cDriver"></select>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">วัน-เวลานัด</label>
+              <input class="finput" type="datetime-local" id="cSchedule"/>
+            </div>
+          </div>
+          <div class="fgroup" style="margin-bottom:0">
+            <label class="flabel">หมายเหตุงาน</label>
+            <input class="finput" id="cNote" placeholder="หมายเหตุ..."/>
+          </div>
+        </div>
+
+        <!-- Stops Builder -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.06em">
+            จุดส่ง <span id="stopCountLabel" style="color:var(--grn)">0 จุด</span>
+          </div>
+          <button class="btn-sm-p" onclick="addStopRow()"><i class="bi bi-plus-lg"></i> เพิ่มจุดส่ง</button>
+        </div>
+        <div id="stopsList"></div>
+        <div id="noStopsMsg" style="text-align:center;padding:24px;color:var(--mute);font-size:13px;background:var(--sur2);border-radius:9px">
+          <i class="bi bi-geo-alt" style="font-size:24px;display:block;margin-bottom:6px"></i>
+          ยังไม่มีจุดส่ง — กด "+ เพิ่มจุดส่ง" ด้านบน
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sec" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn-p" id="btnCreateJob" onclick="submitCreateJob()"><i class="bi bi-check-lg"></i> สร้างงาน</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MODAL: Job Detail
+══════════════════════════════════════ -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="detailTitle">รายละเอียดงาน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailBody" style="padding:20px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MODAL: Confirm Delete
+══════════════════════════════════════ -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
+    <div class="modal-content">
+      <div class="modal-body" style="padding:24px;text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">🗑️</div>
+        <div style="font-weight:700;font-size:16px;margin-bottom:6px">ยืนยันลบงาน?</div>
+        <div style="color:var(--sub);font-size:13px" id="deleteMsg">การกระทำนี้ไม่สามารถย้อนกลับได้</div>
+      </div>
+      <div class="modal-footer" style="gap:8px">
+        <button class="btn-sec" style="flex:1;justify-content:center" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn-danger" style="flex:1;justify-content:center;padding:8px" id="btnConfirmDelete" onclick="confirmDelete()">
+          <i class="bi bi-trash3-fill"></i> ลบ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════════════════
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby9XpoIctaTJwU6W7icq6YGc_2QcgOPsyPxkqzbPUUHR8Cv4cc8piXnlROvBUdzAU8B/exec'; // << เปลี่ยน
+
+// ════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════
+const A = {
+  token   : null,
+  jobs    : [],
+  drivers : [],
+  filter  : 'all',
+  stopRows: 0,
+  deleteTarget: null,
+};
+
+// ════════════════════════════════════════════════════════
+//  LOGIN
+// ════════════════════════════════════════════════════════
+async function doLogin() {
+  const pwd = document.getElementById('loginPwd').value.trim();
+  if (!pwd) return;
+  const btn = document.getElementById('btnLogin');
+  btn.innerHTML = '<div class="spin"></div> กำลังเข้าสู่ระบบ...';
+  btn.disabled  = true;
+  document.getElementById('loginErr').style.display = 'none';
+
+  try {
+    const r = await gasGet('adminLogin', { adminPassword: pwd });
+    if (r.status !== 'success') throw new Error(r.message);
+    A.token = r.token;
+    localStorage.setItem('tms_admin_token', r.token);
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('shell').style.display       = 'flex';
+    await loadAll();
+  } catch(e) {
+    document.getElementById('loginErr').style.display = 'block';
+  } finally {
+    btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> เข้าสู่ระบบ';
+    btn.disabled  = false;
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem('tms_admin_token');
+  location.reload();
+}
+
+// ════════════════════════════════════════════════════════
+//  API HELPERS
+// ════════════════════════════════════════════════════════
+async function gasGet(action, extra={}) {
+  const u = new URL(GAS_URL);
+  u.searchParams.set('action', action);
+  if (A.token) u.searchParams.set('adminToken', A.token);
+  Object.entries(extra).forEach(([k,v]) => u.searchParams.set(k, v));
+  const r = await fetch(u.toString());
+  return r.json();
+}
+
+async function gasPost(action, body={}) {
+  const r = await fetch(GAS_URL, {
+    method : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body   : JSON.stringify({ action, adminToken: A.token, ...body }),
+  });
+  return r.json();
+}
+
+// ════════════════════════════════════════════════════════
+//  LOAD DATA
+// ════════════════════════════════════════════════════════
+async function loadAll() {
+  const [jr, dr] = await Promise.all([
+    gasGet('adminGetJobs'),
+    gasGet('adminGetDrivers'),
+  ]);
+  if (jr.status === 'success') A.jobs    = jr.jobs;
+  if (dr.status === 'success') A.drivers = dr.drivers;
+  renderAll();
+}
+
+async function refreshData() { toast('รีเฟรชข้อมูล...',''); await loadAll(); toast('อัปเดตแล้ว ✓','success'); }
+
+function renderAll() {
+  renderStats();
+  renderRecentTable();
+  renderJobTable();
+  renderDriverTable();
+}
+
+// ════════════════════════════════════════════════════════
+//  STATS
+// ════════════════════════════════════════════════════════
+function renderStats() {
+  const total    = A.jobs.length;
+  const pending  = A.jobs.filter(j => j.Status === 'Pending').length;
+  const active   = A.jobs.filter(j => j.Status === 'In Progress').length;
+  const done     = A.jobs.filter(j => j.Status === 'Completed').length;
+  const drivers  = A.drivers.length;
+
+  // GPS warning count (stops ที่ GPS ไม่ผ่าน)
+  let gpsWarn = 0;
+  A.jobs.forEach(j => (j.stops||[]).forEach(s => {
+    if (s.GPS_Status && s.GPS_Status.startsWith('⚠️')) gpsWarn++;
+  }));
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><i class="bi bi-briefcase-fill stat-icon" style="color:var(--blu)"></i>
+      <div class="stat-val" style="color:var(--blu)">${total}</div>
+      <div class="stat-lbl">งานทั้งหมด</div></div>
+    <div class="stat-card"><i class="bi bi-hourglass-split stat-icon" style="color:var(--ylw)"></i>
+      <div class="stat-val" style="color:var(--ylw)">${pending}</div>
+      <div class="stat-lbl">รอออกรถ</div></div>
+    <div class="stat-card"><i class="bi bi-truck stat-icon" style="color:var(--prp)"></i>
+      <div class="stat-val" style="color:var(--prp)">${active}</div>
+      <div class="stat-lbl">กำลังวิ่ง</div></div>
+    <div class="stat-card"><i class="bi bi-check-circle-fill stat-icon" style="color:var(--grn)"></i>
+      <div class="stat-val" style="color:var(--grn)">${done}</div>
+      <div class="stat-lbl">เสร็จสิ้น</div></div>
+    <div class="stat-card"><i class="bi bi-people-fill stat-icon" style="color:var(--blu)"></i>
+      <div class="stat-val" style="color:var(--blu)">${drivers}</div>
+      <div class="stat-lbl">คนขับ</div></div>
+    ${gpsWarn > 0 ? `
+    <div class="stat-card" style="border-color:var(--red-b)"><i class="bi bi-geo-alt-fill stat-icon" style="color:var(--red)"></i>
+      <div class="stat-val" style="color:var(--red)">${gpsWarn}</div>
+      <div class="stat-lbl">GPS ผิดปกติ</div></div>` : ''}
+  `;
+}
+
+// ════════════════════════════════════════════════════════
+//  RECENT TABLE (Dashboard)
+// ════════════════════════════════════════════════════════
+function renderRecentTable() {
+  const recent = [...A.jobs].slice(0, 10);
+  if (!recent.length) {
+    document.getElementById('recentTable').innerHTML = '<div class="empty-state"><i class="bi bi-inbox"></i>ยังไม่มีงาน</div>';
+    return;
+  }
+  document.getElementById('recentTable').innerHTML = renderJobRows(recent);
+}
+
+// ════════════════════════════════════════════════════════
+//  JOBS TABLE
+// ════════════════════════════════════════════════════════
+function setFilter(f, btn) {
+  A.filter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderJobTable();
+}
+
+function renderJobTable() {
+  let jobs = A.jobs;
+  if (A.filter !== 'all') jobs = jobs.filter(j => j.Status === A.filter);
+  const q = (document.getElementById('jobSearch')?.value || '').toLowerCase();
+  if (q) jobs = jobs.filter(j =>
+    String(j.Job_ID).toLowerCase().includes(q) ||
+    (j.Driver_Name||'').toLowerCase().includes(q)
+  );
+
+  if (!jobs.length) {
+    document.getElementById('jobTable').innerHTML = '<div class="empty-state"><i class="bi bi-inbox"></i>ไม่มีงานที่ตรงเงื่อนไข</div>';
+    return;
+  }
+  document.getElementById('jobTable').innerHTML = renderJobRows(jobs);
+}
+
+function renderJobRows(jobs) {
+  return `
+  <table>
+    <thead><tr>
+      <th>Job ID</th><th>คนขับ</th><th>กำหนดวัน</th><th>จุดส่ง</th><th>ความคืบหน้า</th><th>GPS</th><th>สถานะ</th><th></th>
+    </tr></thead>
+    <tbody>
+      ${jobs.map(j => {
+        const stops   = j.stops || [];
+        const total   = stops.length;
+        const done    = stops.filter(s => s.Status === 'Completed').length;
+        const pct     = total ? Math.round(done/total*100) : 0;
+        const sClasses = { 'Pending':'b-pending', 'In Progress':'b-inprog', 'Completed':'b-done' };
+        const sLabels  = { 'Pending':'⏳ รอออกรถ', 'In Progress':'🚚 กำลังวิ่ง', 'Completed':'✅ เสร็จสิ้น' };
+
+        // GPS warning count
+        const gpsWarn = stops.filter(s => s.GPS_Status && s.GPS_Status.startsWith('⚠️')).length;
+        const gpsTag  = !stops.some(s => s.GPS_Status)
+          ? `<span class="badge-s b-gps-na">—</span>`
+          : gpsWarn > 0
+          ? `<span class="badge-s b-gps-warn" title="${gpsWarn} จุดที่ GPS ผิดปกติ">⚠️ ${gpsWarn} จุด</span>`
+          : `<span class="badge-s b-gps-ok">✅ ผ่าน</span>`;
+
+        return `<tr>
+          <td class="td-mono" style="color:var(--grn)">${j.Job_ID}</td>
+          <td>${j.Driver_Name || '<span class="td-mute">—</span>'}</td>
+          <td class="td-mute">${j.Scheduled_Time || '—'}</td>
+          <td style="font-family:var(--mono);font-size:12px">${done}/${total}</td>
+          <td style="min-width:100px">
+            <div class="prog-wrap"><div class="prog-bar" style="width:${pct}%"></div></div>
+            <div style="font-size:10px;color:var(--mute);margin-top:2px">${pct}%</div>
+          </td>
+          <td>${gpsTag}</td>
+          <td><span class="badge-s ${sClasses[j.Status]||'b-pending'}">${sLabels[j.Status]||j.Status}</span></td>
+          <td style="white-space:nowrap">
+            <button class="btn-icon" onclick="openDetail('${j.Job_ID}')" title="ดูรายละเอียด"><i class="bi bi-eye-fill"></i></button>
+            <button class="btn-danger ms-1" onclick="openDeleteConfirm('${j.Job_ID}')" title="ลบ"><i class="bi bi-trash3-fill"></i></button>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ════════════════════════════════════════════════════════
+//  DRIVERS TABLE
+// ════════════════════════════════════════════════════════
+function renderDriverTable() {
+  const d = A.drivers;
+  if (!d.length) {
+    document.getElementById('driverTable').innerHTML = '<div class="empty-state"><i class="bi bi-people"></i>ไม่มีคนขับ</div>';
+    return;
+  }
+  document.getElementById('driverTable').innerHTML = `
+  <table>
+    <thead><tr><th>ชื่อ</th><th>เบอร์โทร</th><th>ประเภทรถ</th><th>ทะเบียน</th><th>LINE ID</th><th>ลงทะเบียนเมื่อ</th></tr></thead>
+    <tbody>
+      ${d.map(dr => `<tr>
+        <td style="font-weight:600">${dr.Name||'—'}</td>
+        <td class="td-mute">${dr.Phone||'—'}</td>
+        <td>${dr.Vehicle_Type||'—'}</td>
+        <td class="td-mono">${dr.Vehicle_Plate||'—'}</td>
+        <td class="td-mono" style="font-size:11px;color:var(--mute)">${dr.Line_User_ID||'—'}</td>
+        <td class="td-mute">${dr.Registered_At||'—'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ════════════════════════════════════════════════════════
+//  JOB DETAIL MODAL
+// ════════════════════════════════════════════════════════
+function openDetail(jobId) {
+  const job = A.jobs.find(j => String(j.Job_ID) === String(jobId));
+  if (!job) return;
+
+  document.getElementById('detailTitle').innerHTML =
+    `<i class="bi bi-briefcase-fill" style="color:var(--grn)"></i> งาน #${job.Job_ID}
+     <span class="badge-s ${{Pending:'b-pending','In Progress':'b-inprog',Completed:'b-done'}[job.Status]||'b-pending'} ms-2">${job.Status}</span>`;
+
+  const stops  = (job.stops || []);
+  const dName  = job.Driver_Name || job.Driver_User_ID || '—';
+
+  document.getElementById('detailBody').innerHTML = `
+    <!-- Job summary -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:18px">
+      ${infoCard('👤 คนขับ', dName)}
+      ${infoCard('📅 กำหนดวัน', job.Scheduled_Time||'—')}
+      ${infoCard('🚀 เริ่มงาน', job.Start_Time||'—')}
+      ${infoCard('🏁 เสร็จงาน', job.Complete_Time||'—')}
+      ${infoCard('📍 จุดส่ง', `${stops.filter(s=>s.Status==='Completed').length}/${stops.length} จุด`)}
+      ${job.Note ? infoCard('📋 หมายเหตุ', job.Note) : ''}
+    </div>
+
+    <!-- GPS Start -->
+    ${job.Start_GPS ? gpsRowCard('📍 GPS ออกรถ', job.Start_GPS, null, null, null) : ''}
+
+    <!-- Stops detail -->
+    <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">จุดส่งทั้งหมด</div>
+    ${stops.map(s => renderStopDetail(s)).join('')}
+  `;
+
+  // Async: load place names
+  stops.forEach(s => {
+    if (s.Complete_GPS) loadPlaceName(s.Stop_ID + '_c', s.Complete_GPS);
+    if (s.Arrive_GPS)   loadPlaceName(s.Stop_ID + '_a', s.Arrive_GPS);
+    if (s.Lat && s.Lng) loadPlaceName(s.Stop_ID + '_t', s.Lat+','+s.Lng);
+  });
+  if (job.Start_GPS) loadPlaceName('job_start', job.Start_GPS);
+
+  new bootstrap.Modal(document.getElementById('detailModal')).show();
+}
+
+function infoCard(label, val) {
+  return `<div style="background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px">
+    <div style="font-size:10px;color:var(--mute);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">${label}</div>
+    <div style="font-size:13px;font-weight:600">${val}</div>
+  </div>`;
+}
+
+function renderStopDetail(s) {
+  const isDone   = s.Status === 'Completed';
+  const isActive = s.Status === 'In Progress' || s.Status === 'Arrived';
+  const nodeClr  = isDone ? 'var(--grn)' : isActive ? 'var(--blu)' : 'var(--mute)';
+  const sLabel   = {Pending:'รอ',  'In Progress':'กำลังไป', Arrived:'ถึงแล้ว', Completed:'ส่งแล้ว'}[s.Status] || s.Status;
+
+  // GPS check
+  let gpsBlock = '';
+  if (s.Complete_GPS) {
+    const gpsOk = s.GPS_Status && s.GPS_Status.startsWith('✅');
+    const gpsWn = s.GPS_Status && s.GPS_Status.startsWith('⚠️');
+    const dist  = s.GPS_Distance_M ? `${s.GPS_Distance_M} ม.` : null;
+    gpsBlock = gpsRowCard(
+      '📍 GPS ตอนส่ง',
+      s.Complete_GPS,
+      dist,
+      gpsOk, gpsWn,
+      s.Stop_ID + '_c'
+    );
+  }
+
+  // Target GPS (ที่ admin กำหนด)
+  let targetBlock = '';
+  if (s.Lat && s.Lng) {
+    targetBlock = gpsRowCard('🎯 พิกัดเป้าหมาย', s.Lat+','+s.Lng, null, null, null, s.Stop_ID+'_t');
+  }
+
+  return `
+  <div style="background:var(--sur2);border:1px solid ${isDone?'var(--grn-b)':isActive?'var(--blu-b)':'var(--bdr)'};border-radius:10px;padding:14px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="width:28px;height:28px;border-radius:50%;background:${nodeClr}22;border:2px solid ${nodeClr};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${nodeClr};flex-shrink:0">${s.Stop_Order}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${s.Recipient_Name||'ไม่มีชื่อ'}</div>
+        <div style="font-size:12px;color:var(--sub)">${s.Address||'—'}</div>
+      </div>
+      <span class="badge-s" style="background:${nodeClr}22;color:${nodeClr};border-color:${nodeClr}">${sLabel}</span>
+      ${s.Proof_Image_URL ? `<img class="proof-thumb" src="${s.Proof_Image_URL}" onclick="window.open('${s.Proof_Image_URL}','_blank')" title="คลิกดูรูปเต็ม"/>` : ''}
+    </div>
+
+    ${s.Phone ? `<div style="font-size:12px;color:var(--sub);margin-bottom:8px"><i class="bi bi-telephone"></i> ${s.Phone}</div>` : ''}
+    ${s.Note  ? `<div style="font-size:12px;color:var(--ylw);margin-bottom:8px"><i class="bi bi-sticky"></i> ${s.Note}</div>` : ''}
+
+    ${targetBlock}
+    ${gpsBlock}
+
+    ${s.Arrive_GPS ? `<div style="font-size:11px;color:var(--sub);margin-top:6px">
+      <i class="bi bi-clock-history"></i> ถึงจุด: ${s.Arrive_Time||'—'}
+      &nbsp;|&nbsp; <i class="bi bi-geo-alt"></i>
+      <a href="${gpsLink(s.Arrive_GPS)}" target="_blank" style="color:var(--blu);text-decoration:none">${s.Arrive_GPS}</a>
+    </div>` : ''}
+
+    ${s.Complete_Time ? `<div style="font-size:11px;color:var(--grn);margin-top:4px"><i class="bi bi-check2-circle"></i> ส่งสำเร็จ: ${s.Complete_Time}</div>` : ''}
+  </div>`;
+}
+
+function gpsRowCard(label, gpsStr, dist, isOk, isWarn, placeId) {
+  const link  = gpsLink(gpsStr);
+  const color = isOk ? 'var(--grn)' : isWarn ? 'var(--red)' : 'var(--sub)';
+  const [lat, lng] = gpsStr.split(',');
+  return `
+  <div class="gps-card" style="margin-bottom:8px${isWarn?';border-color:var(--red-b)':''}">
+    <div style="font-size:10px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">${label}</div>
+    <div class="gps-row">
+      <i class="bi bi-crosshair2" style="color:${color}"></i>
+      <span class="gps-val">${lat?.trim()}, ${lng?.trim()}</span>
+      ${dist ? `<span class="${isOk?'gps-dist-ok':'gps-dist-warn'} ms-1">${dist}</span>` : ''}
+    </div>
+    <div class="gps-row" style="margin-top:5px">
+      <i class="bi bi-map"></i>
+      <span id="place_${placeId||'x'}" style="color:var(--mute);font-size:11px"><div class="spin" style="width:10px;height:10px;border-width:1px"></div></span>
+    </div>
+    <div class="gps-row" style="margin-top:4px">
+      <i class="bi bi-box-arrow-up-right" style="color:var(--blu)"></i>
+      <a href="${link}" target="_blank" style="color:var(--blu);font-size:12px;text-decoration:none">เปิดใน Google Maps</a>
+      &nbsp;|&nbsp;
+      <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}" target="_blank" style="color:var(--sub);font-size:11px;text-decoration:none">OpenStreetMap</a>
+    </div>
+  </div>`;
+}
+
+function gpsLink(gpsStr) {
+  const [lat, lng] = (gpsStr||'').split(',');
+  if (!lat || !lng) return '#';
+  return `https://www.google.com/maps?q=${lat.trim()},${lng.trim()}&z=17`;
+}
+
+async function loadPlaceName(id, gpsStr) {
+  const el = document.getElementById('place_' + id);
+  if (!el) return;
+  try {
+    const [lat, lng] = gpsStr.split(',');
+    const r = await gasGet('reverseGeocode', { lat: lat.trim(), lng: lng.trim() });
+    if (r.status === 'success' && r.place) {
+      el.textContent = r.place;
+      el.style.color = 'var(--txt)';
+    } else el.textContent = gpsStr;
+  } catch { el.textContent = gpsStr; }
+}
+
+// ════════════════════════════════════════════════════════
+//  CREATE JOB MODAL
+// ════════════════════════════════════════════════════════
+function openCreateModal() {
+  A.stopRows = 0;
+  document.getElementById('stopsList').innerHTML    = '';
+  document.getElementById('noStopsMsg').style.display = 'block';
+  updateStopCount();
+
+  // Fill driver dropdown
+  const sel = document.getElementById('cDriver');
+  sel.innerHTML = '<option value="">-- เลือกคนขับ --</option>' +
+    A.drivers.map(d => `<option value="${d.Line_User_ID}">${d.Name} (${d.Vehicle_Plate||'—'})</option>`).join('');
+
+  document.getElementById('cNote').value     = '';
+  document.getElementById('cSchedule').value = '';
+
+  new bootstrap.Modal(document.getElementById('createModal')).show();
+}
+
+function addStopRow() {
+  A.stopRows++;
+  const idx = A.stopRows;
+  document.getElementById('noStopsMsg').style.display = 'none';
+
+  const div = document.createElement('div');
+  div.className = 'stop-item';
+  div.id = 'stopRow_' + idx;
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div class="stop-num">${idx}</div>
+      <div style="font-weight:600;font-size:13px;flex:1">จุดที่ ${idx}</div>
+      <button class="btn-danger" style="padding:4px 8px" onclick="removeStop(${idx})"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="stop-grid">
+      <div class="fgroup"><label class="flabel">ชื่อผู้รับ</label><input class="finput" id="s${idx}_name" placeholder="ร้านค้า / ชื่อลูกค้า"/></div>
+      <div class="fgroup"><label class="flabel">เบอร์โทร</label><input class="finput" id="s${idx}_phone" type="tel" placeholder="08x-xxx-xxxx"/></div>
+    </div>
+    <div class="fgroup"><label class="flabel">ที่อยู่จุดส่ง <span style="color:var(--red)">*</span></label><input class="finput" id="s${idx}_addr" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด"/></div>
+    <div class="stop-grid">
+      <div class="fgroup">
+        <label class="flabel">Latitude <span style="color:var(--sub)">(พิกัด)</span></label>
+        <div style="display:flex;gap:6px">
+          <input class="finput" id="s${idx}_lat" placeholder="13.7563" style="flex:1"/>
+          <button class="btn-sec" style="padding:6px 9px;font-size:13px" onclick="pickGPS(${idx})" title="ใช้ตำแหน่งปัจจุบัน"><i class="bi bi-crosshair"></i></button>
+        </div>
+      </div>
+      <div class="fgroup"><label class="flabel">Longitude</label><input class="finput" id="s${idx}_lng" placeholder="100.5018"/></div>
+    </div>
+    <div class="fgroup" style="margin-bottom:0"><label class="flabel">หมายเหตุจุดนี้</label><input class="finput" id="s${idx}_note" placeholder="หมายเหตุ..."/></div>
+  `;
+  document.getElementById('stopsList').appendChild(div);
+  updateStopCount();
+}
+
+function removeStop(idx) {
+  document.getElementById('stopRow_' + idx)?.remove();
+  if (!document.getElementById('stopsList').children.length) {
+    document.getElementById('noStopsMsg').style.display = 'block';
+  }
+  updateStopCount();
+}
+
+function updateStopCount() {
+  const c = document.getElementById('stopsList').children.length;
+  document.getElementById('stopCountLabel').textContent = c + ' จุด';
+}
+
+async function pickGPS(idx) {
+  try {
+    const pos = await new Promise((res,rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy:true, timeout:10000})
+    );
+    document.getElementById('s'+idx+'_lat').value = pos.coords.latitude.toFixed(6);
+    document.getElementById('s'+idx+'_lng').value = pos.coords.longitude.toFixed(6);
+    toast('📍 ใช้ตำแหน่งปัจจุบันแล้ว','success');
+  } catch(e) { toast('❌ ไม่สามารถระบุตำแหน่ง: '+e.message,'error'); }
+}
+
+async function submitCreateJob() {
+  const driverId = document.getElementById('cDriver').value;
+  if (!driverId) { toast('❌ กรุณาเลือกคนขับ','error'); return; }
+
+  const stopItems = document.getElementById('stopsList').children;
+  if (!stopItems.length) { toast('❌ ต้องมีอย่างน้อย 1 จุดส่ง','error'); return; }
+
+  const stops = [];
+  let valid = true;
+  for (let i = 0; i < stopItems.length; i++) {
+    const id = stopItems[i].id.replace('stopRow_','');
+    const addr = document.getElementById('s'+id+'_addr').value.trim();
+    if (!addr) { toast(`❌ จุดที่ ${i+1}: กรุณากรอกที่อยู่`,'error'); valid=false; break; }
+    stops.push({
+      recipientName: document.getElementById('s'+id+'_name').value.trim(),
+      address      : addr,
+      phone        : document.getElementById('s'+id+'_phone').value.trim(),
+      lat          : document.getElementById('s'+id+'_lat').value.trim(),
+      lng          : document.getElementById('s'+id+'_lng').value.trim(),
+      note         : document.getElementById('s'+id+'_note').value.trim(),
+    });
+  }
+  if (!valid) return;
+
+  const btn = document.getElementById('btnCreateJob');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> กำลังสร้าง...';
+
+  try {
+    const r = await gasPost('adminCreateJob', {
+      driverUserId : driverId,
+      scheduledTime: document.getElementById('cSchedule').value,
+      note         : document.getElementById('cNote').value.trim(),
+      stops,
+    });
+    if (r.status !== 'success') throw new Error(r.message);
+    bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
+    toast(`✅ สร้างงาน ${r.jobId} สำเร็จ (${stops.length} จุด)`,'success');
+    await loadAll();
+  } catch(e) {
+    toast('❌ '+e.message,'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i> สร้างงาน';
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  DELETE JOB
+// ════════════════════════════════════════════════════════
+function openDeleteConfirm(jobId) {
+  A.deleteTarget = jobId;
+  document.getElementById('deleteMsg').textContent = `ลบงาน #${jobId} และจุดส่งทั้งหมด — ย้อนกลับไม่ได้`;
+  new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+async function confirmDelete() {
+  if (!A.deleteTarget) return;
+  const btn = document.getElementById('btnConfirmDelete');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div>';
+  try {
+    const r = await gasPost('adminDeleteJob', { jobId: A.deleteTarget });
+    if (r.status !== 'success') throw new Error(r.message);
+    bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+    toast(`✅ ลบงาน #${A.deleteTarget} แล้ว`,'success');
+    A.deleteTarget = null;
+    await loadAll();
+  } catch(e) { toast('❌ '+e.message,'error'); }
+  finally { btn.disabled=false; btn.innerHTML='<i class="bi bi-trash3-fill"></i> ลบ'; }
+}
+
+// ════════════════════════════════════════════════════════
+//  UI NAV
+// ════════════════════════════════════════════════════════
+function switchView(view) {
+  ['dashboard','jobs','drivers'].forEach(v => {
+    document.getElementById('view'+cap(v)).style.display = v===view ? 'block' : 'none';
+    document.getElementById('nav-'+v).classList.toggle('active', v===view);
+  });
+  document.getElementById('pageTitle').textContent = {dashboard:'Dashboard',jobs:'จัดการงาน',drivers:'คนขับ'}[view];
+  document.getElementById('btnNewJob').style.display = view==='jobs' ? 'inline-flex' : 'none';
+}
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+// ════════════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════════════
+function toast(msg, type='success') {
+  const w = document.getElementById('toastWrap');
+  const t = document.createElement('div');
+  t.className = 'toast-t' + (type?' '+type:'');
+  const icon = type==='success'?'✅':type==='error'?'❌':type==='warn'?'⚠️':'ℹ️';
+  t.innerHTML = `<span>${icon}</span><span style="flex:1">${msg}</span><span style="cursor:pointer;color:var(--mute)" onclick="this.parentElement.remove()">✕</span>`;
+  w.appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 4000);
+}
+
+// ════════════════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  // Auto-login ถ้ามี token ใน localStorage (valid วันเดียวกัน)
+  const saved = localStorage.getItem('tms_admin_token');
+  if (saved) {
+    A.token = saved;
+    // ลอง verify ก่อน
+    gasGet('adminGetJobs').then(r => {
+      if (r.status === 'success') {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('shell').style.display = 'flex';
+        A.jobs = r.jobs;
+        gasGet('adminGetDrivers').then(dr => {
+          if (dr.status === 'success') A.drivers = dr.drivers;
+          renderAll();
+        });
+      } else {
+        // token หมดอายุ
+        localStorage.removeItem('tms_admin_token');
+      }
+    });
+  }
+});
+</script>
+</body>
+</html>
