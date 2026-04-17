@@ -7,6 +7,8 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <!-- QR Code generator -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
 
   <style>
@@ -154,6 +156,21 @@
     ::-webkit-scrollbar-track{background:transparent}
     ::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px}
 
+    /* ── QR Print ── */
+    .qr-print-card{background:#fff;color:#000;border-radius:12px;padding:16px;text-align:center;border:2px solid #e5e7eb}
+    .qr-print-card .job-id{font-family:monospace;font-size:20px;font-weight:800;color:#111;margin-bottom:4px}
+    .qr-print-card .job-stops{font-size:11px;color:#6b7280;margin-bottom:10px}
+    .qr-print-card canvas{border-radius:6px}
+    .qr-print-card .scan-hint{font-size:10px;color:#9ca3af;margin-top:8px}
+    .claimed-chip{display:inline-flex;align-items:center;gap:5px;background:var(--grn-d);color:var(--grn);border:1px solid var(--grn-b);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700}
+    .unclaimed-chip{display:inline-flex;align-items:center;gap:5px;background:var(--ylw-d);color:var(--ylw);border:1px solid rgba(251,191,36,.3);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700}
+    @media print{
+      body *{visibility:hidden}
+      #printQrGrid,#printQrGrid *{visibility:visible}
+      #printQrGrid{position:fixed;inset:0;background:#fff;padding:20px;display:grid!important;grid-template-columns:repeat(3,1fr);gap:20px}
+      .modal,.modal-backdrop{display:none!important}
+    }
+
     /* Responsive */
     @media(max-width:768px){
       .sidebar{display:none}
@@ -210,6 +227,7 @@
       <div class="page-title" id="pageTitle">Dashboard</div>
       <div class="topbar-right">
         <button class="btn-sec" onclick="refreshData()"><i class="bi bi-arrow-clockwise"></i> รีเฟรช</button>
+        <button class="btn-sec" id="btnPrintQR" onclick="openPrintQR()" style="display:none"><i class="bi bi-printer"></i> พิมพ์ QR</button>
         <button class="btn-p" id="btnNewJob" onclick="openCreateModal()" style="display:none"><i class="bi bi-plus-lg"></i> สร้างงานใหม่</button>
       </div>
     </div>
@@ -267,15 +285,13 @@
         <!-- Job Info -->
         <div style="background:var(--sur2);border-radius:9px;padding:14px;margin-bottom:16px">
           <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">ข้อมูลงาน</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div class="fgroup">
-              <label class="flabel">คนขับ <span style="color:var(--red)">*</span></label>
-              <select class="finput" id="cDriver"></select>
-            </div>
-            <div class="fgroup">
-              <label class="flabel">วัน-เวลานัด</label>
-              <input class="finput" type="datetime-local" id="cSchedule"/>
-            </div>
+          <div style="background:var(--grn-d);border:1px solid var(--grn-b);border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--grn)">
+            <i class="bi bi-qr-code" style="font-size:16px"></i>
+            <span>ระบบจะ Generate QR Code ให้อัตโนมัติ — คนขับสแกนเพื่อรับงานเอง ไม่ต้องเลือกคนขับ</span>
+          </div>
+          <div class="fgroup">
+            <label class="flabel">วัน-เวลานัด</label>
+            <input class="finput" type="datetime-local" id="cSchedule"/>
           </div>
           <div class="fgroup" style="margin-bottom:0">
             <label class="flabel">หมายเหตุงาน</label>
@@ -315,6 +331,65 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="detailBody" style="padding:20px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MODAL: QR Code
+══════════════════════════════════════ -->
+<div class="modal fade" id="qrModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-qr-code" style="color:var(--grn)"></i> QR สำหรับรับงาน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:20px">
+        <!-- Job Summary -->
+        <div id="qrJobSummary" style="background:var(--sur2);border-radius:9px;padding:12px;margin-bottom:16px;font-size:13px"></div>
+        <!-- QR Canvas -->
+        <div style="display:flex;justify-content:center;margin-bottom:14px">
+          <div style="background:#fff;border-radius:12px;padding:14px;display:inline-block">
+            <canvas id="qrCanvas"></canvas>
+          </div>
+        </div>
+        <!-- URL -->
+        <div style="background:var(--sur2);border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div id="qrUrlText" style="font-family:var(--mono);font-size:11px;color:var(--sub);flex:1;word-break:break-all"></div>
+          <button class="btn-icon" onclick="copyQrUrl()" title="คัดลอก URL"><i class="bi bi-clipboard"></i></button>
+        </div>
+        <!-- Status -->
+        <div id="qrClaimStatus" style="text-align:center;font-size:12px;color:var(--mute)"></div>
+      </div>
+      <div class="modal-footer" style="gap:8px">
+        <button class="btn-sec" onclick="printQR()"><i class="bi bi-printer"></i> พิมพ์ QR</button>
+        <button class="btn-p" onclick="downloadQR()"><i class="bi bi-download"></i> ดาวน์โหลด</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MODAL: Print All QR
+══════════════════════════════════════ -->
+<div class="modal fade" id="printQrModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-printer" style="color:var(--grn)"></i> พิมพ์ QR ทั้งหมด</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:20px">
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+          <div style="font-size:13px;color:var(--sub)">แสดงเฉพาะ:</div>
+          <button class="filter-btn active" id="printFilterAll"   onclick="setPrintFilter('all',this)">ทั้งหมด</button>
+          <button class="filter-btn"        id="printFilterWait"  onclick="setPrintFilter('wait',this)">⏳ รอคนขับรับ</button>
+          <button class="filter-btn"        id="printFilterClaim" onclick="setPrintFilter('claimed',this)">✅ รับแล้ว</button>
+          <button class="btn-p ms-auto" onclick="window.print()"><i class="bi bi-printer"></i> สั่งพิมพ์</button>
+        </div>
+        <div id="printQrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -517,7 +592,7 @@ function renderJobRows(jobs) {
   return `
   <table>
     <thead><tr>
-      <th>Job ID</th><th>คนขับ</th><th>กำหนดวัน</th><th>จุดส่ง</th><th>ความคืบหน้า</th><th>GPS</th><th>สถานะ</th><th></th>
+      <th>Job ID</th><th>รับงาน</th><th>คนขับ</th><th>กำหนดวัน</th><th>จุดส่ง</th><th>ความคืบหน้า</th><th>GPS</th><th>สถานะ</th><th></th>
     </tr></thead>
     <tbody>
       ${jobs.map(j => {
@@ -536,8 +611,14 @@ function renderJobRows(jobs) {
           ? `<span class="badge-s b-gps-warn" title="${gpsWarn} จุดที่ GPS ผิดปกติ">⚠️ ${gpsWarn} จุด</span>`
           : `<span class="badge-s b-gps-ok">✅ ผ่าน</span>`;
 
+        // Claim status
+        const claimTag = j.Driver_User_ID
+          ? `<span class="claimed-chip"><i class="bi bi-person-check-fill"></i> ${j.Driver_Name||'รับแล้ว'}</span>`
+          : `<span class="unclaimed-chip"><i class="bi bi-qr-code"></i> รอสแกน QR</span>`;
+
         return `<tr>
           <td class="td-mono" style="color:var(--grn)">${j.Job_ID}</td>
+          <td>${claimTag}</td>
           <td>${j.Driver_Name || '<span class="td-mute">—</span>'}</td>
           <td class="td-mute">${j.Scheduled_Time || '—'}</td>
           <td style="font-family:var(--mono);font-size:12px">${done}/${total}</td>
@@ -547,9 +628,10 @@ function renderJobRows(jobs) {
           </td>
           <td>${gpsTag}</td>
           <td><span class="badge-s ${sClasses[j.Status]||'b-pending'}">${sLabels[j.Status]||j.Status}</span></td>
-          <td style="white-space:nowrap">
+          <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
+            <button class="btn-icon" onclick="openQR('${j.Job_ID}')" title="QR Code"><i class="bi bi-qr-code"></i></button>
             <button class="btn-icon" onclick="openDetail('${j.Job_ID}')" title="ดูรายละเอียด"><i class="bi bi-eye-fill"></i></button>
-            <button class="btn-danger ms-1" onclick="openDeleteConfirm('${j.Job_ID}')" title="ลบ"><i class="bi bi-trash3-fill"></i></button>
+            <button class="btn-danger" onclick="openDeleteConfirm('${j.Job_ID}')" title="ลบ"><i class="bi bi-trash3-fill"></i></button>
           </td>
         </tr>`;
       }).join('')}
@@ -741,11 +823,6 @@ function openCreateModal() {
   document.getElementById('noStopsMsg').style.display = 'block';
   updateStopCount();
 
-  // Fill driver dropdown
-  const sel = document.getElementById('cDriver');
-  sel.innerHTML = '<option value="">-- เลือกคนขับ --</option>' +
-    A.drivers.map(d => `<option value="${d.Line_User_ID}">${d.Name} (${d.Vehicle_Plate||'—'})</option>`).join('');
-
   document.getElementById('cNote').value     = '';
   document.getElementById('cSchedule').value = '';
 
@@ -812,9 +889,6 @@ async function pickGPS(idx) {
 }
 
 async function submitCreateJob() {
-  const driverId = document.getElementById('cDriver').value;
-  if (!driverId) { toast('❌ กรุณาเลือกคนขับ','error'); return; }
-
   const stopItems = document.getElementById('stopsList').children;
   if (!stopItems.length) { toast('❌ ต้องมีอย่างน้อย 1 จุดส่ง','error'); return; }
 
@@ -841,15 +915,16 @@ async function submitCreateJob() {
 
   try {
     const r = await gasPost('adminCreateJob', {
-      driverUserId : driverId,
       scheduledTime: document.getElementById('cSchedule').value,
       note         : document.getElementById('cNote').value.trim(),
       stops,
     });
     if (r.status !== 'success') throw new Error(r.message);
     bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
-    toast(`✅ สร้างงาน ${r.jobId} สำเร็จ (${stops.length} จุด)`,'success');
+    toast(`✅ สร้างงาน ${r.jobId} สำเร็จ — QR พร้อมใช้งาน`, 'success');
     await loadAll();
+    // เปิด QR Modal ทันทีหลังสร้างงาน
+    setTimeout(() => openQR(r.jobId), 400);
   } catch(e) {
     toast('❌ '+e.message,'error');
   } finally {
@@ -892,7 +967,8 @@ function switchView(view) {
     document.getElementById('nav-'+v).classList.toggle('active', v===view);
   });
   document.getElementById('pageTitle').textContent = {dashboard:'Dashboard',jobs:'จัดการงาน',drivers:'คนขับ'}[view];
-  document.getElementById('btnNewJob').style.display = view==='jobs' ? 'inline-flex' : 'none';
+  document.getElementById('btnNewJob').style.display   = view==='jobs' ? 'inline-flex' : 'none';
+  document.getElementById('btnPrintQR').style.display  = view==='jobs' ? 'inline-flex' : 'none';
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
@@ -907,6 +983,146 @@ function toast(msg, type='success') {
   t.innerHTML = `<span>${icon}</span><span style="flex:1">${msg}</span><span style="cursor:pointer;color:var(--mute)" onclick="this.parentElement.remove()">✕</span>`;
   w.appendChild(t);
   setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 4000);
+}
+
+// ════════════════════════════════════════════════════════
+//  QR CODE FUNCTIONS
+// ════════════════════════════════════════════════════════
+let _currentQrUrl  = '';
+let _printFilter   = 'all';
+
+async function openQR(jobId) {
+  const job   = A.jobs.find(j => String(j.Job_ID) === String(jobId));
+  const stops = job?.stops || [];
+
+  // Job summary
+  const isClaimed = !!job?.Driver_User_ID;
+  const summaryEl = document.getElementById('qrJobSummary');
+  summaryEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-weight:700;font-family:var(--mono);font-size:16px;color:var(--grn)">#${jobId}</span>
+      ${isClaimed
+        ? `<span class="claimed-chip"><i class="bi bi-person-check-fill"></i> ${job.Driver_Name||'รับแล้ว'}</span>`
+        : `<span class="unclaimed-chip"><i class="bi bi-qr-code"></i> รอสแกน QR</span>`}
+    </div>
+    <div style="font-size:12px;color:var(--sub)">${stops.length} จุดส่ง  •  ${job?.Scheduled_Time||'ไม่ระบุวัน'}</div>
+    ${job?.Note ? `<div style="font-size:12px;color:var(--ylw);margin-top:3px">${job.Note}</div>` : ''}
+  `;
+
+  // Get claim URL (use cached from job or fetch fresh)
+  let claimUrl = '';
+  try {
+    const r = await gasGet('adminGetJobQR', { jobId });
+    if (r.status === 'success') claimUrl = r.claimUrl;
+  } catch { claimUrl = GAS_URL.replace('/exec','') + '?jobId=' + jobId; }
+
+  _currentQrUrl = claimUrl;
+  document.getElementById('qrUrlText').textContent = claimUrl;
+
+  // Generate QR
+  const canvas = document.getElementById('qrCanvas');
+  QRCode.toCanvas(canvas, claimUrl, { width: 220, margin: 1, color: { dark: '#000', light: '#fff' } });
+
+  // Status
+  const statusEl = document.getElementById('qrClaimStatus');
+  statusEl.innerHTML = isClaimed
+    ? `<span style="color:var(--grn)">✅ ${job.Driver_Name} รับงานแล้ว เมื่อ ${job.Claimed_At||'—'}</span>`
+    : `<span style="color:var(--mute)">⏳ รอคนขับสแกน QR นี้เพื่อรับงาน</span>`;
+
+  new bootstrap.Modal(document.getElementById('qrModal')).show();
+}
+
+function copyQrUrl() {
+  if (!_currentQrUrl) return;
+  navigator.clipboard.writeText(_currentQrUrl).then(() => toast('✅ คัดลอก URL แล้ว', 'success'));
+}
+
+function downloadQR() {
+  const canvas = document.getElementById('qrCanvas');
+  const a = document.createElement('a');
+  a.download = 'QR_' + (document.getElementById('qrJobSummary').querySelector('span')?.textContent?.trim() || 'job') + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+function printQR() {
+  // Get jobId from modal summary
+  const jobLabel = document.getElementById('qrJobSummary').querySelector('span')?.textContent?.trim() || '';
+  const jobId = jobLabel.replace('#','');
+  bootstrap.Modal.getInstance(document.getElementById('qrModal')).hide();
+  setTimeout(() => openPrintQR(jobId), 300);
+}
+
+// ── Print All QR ─────────────────────────────────────────────
+function setPrintFilter(f, btn) {
+  _printFilter = f;
+  document.querySelectorAll('#printQrModal .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderPrintGrid();
+}
+
+async function openPrintQR(singleJobId) {
+  let jobs = singleJobId
+    ? A.jobs.filter(j => String(j.Job_ID) === String(singleJobId))
+    : A.jobs;
+  
+  // Reset filter
+  _printFilter = singleJobId ? 'all' : 'wait';
+  document.querySelectorAll('#printQrModal .filter-btn').forEach((b,i) => b.classList.toggle('active', i===(singleJobId?0:1)));
+
+  // Pre-fetch all claimUrls via adminGetJobQR for each job that doesn't have one cached
+  // (We'll build URLs client-side from LIFF_BASE_URL pattern for speed)
+  A._qrJobs = jobs;
+  renderPrintGrid();
+  new bootstrap.Modal(document.getElementById('printQrModal')).show();
+}
+
+async function renderPrintGrid() {
+  const grid = document.getElementById('printQrGrid');
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px"><div class="spin"></div></div>';
+
+  let jobs = A._qrJobs || A.jobs;
+  if (_printFilter === 'wait')    jobs = jobs.filter(j => !j.Driver_User_ID);
+  if (_printFilter === 'claimed') jobs = jobs.filter(j =>  j.Driver_User_ID);
+
+  if (!jobs.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><i class="bi bi-qr-code"></i>ไม่มีงานที่ตรงเงื่อนไข</div>';
+    return;
+  }
+
+  grid.innerHTML = '';
+  for (const job of jobs) {
+    // Fetch claim URL
+    let claimUrl = '';
+    try {
+      const r = await gasGet('adminGetJobQR', { jobId: job.Job_ID });
+      if (r.status === 'success') claimUrl = r.claimUrl;
+    } catch { claimUrl = '#'; }
+
+    const stops  = job.stops || [];
+    const card   = document.createElement('div');
+    card.className = 'qr-print-card';
+
+    // Summary text
+    const stopList = stops.slice(0,3).map(s => `${s.Stop_Order}. ${s.Recipient_Name||''}`).join(' · ')
+      + (stops.length > 3 ? ` +${stops.length-3}` : '');
+
+    card.innerHTML = `
+      <div class="job-id">#${job.Job_ID}</div>
+      <div class="job-stops">${stops.length} จุดส่ง${job.Scheduled_Time?' · '+job.Scheduled_Time.slice(0,10):''}</div>
+      ${job.Note ? `<div style="font-size:10px;color:#6b7280;margin-bottom:6px">${job.Note}</div>` : ''}
+      <canvas id="printCanvas_${job.Job_ID}"></canvas>
+      <div class="scan-hint">📱 สแกนเพื่อรับงาน · ${stopList}</div>
+      ${job.Driver_User_ID ? `<div style="font-size:10px;color:#10b981;margin-top:4px">✅ ${job.Driver_Name||''} รับแล้ว</div>` : ''}
+    `;
+    grid.appendChild(card);
+
+    // Render QR into this card's canvas
+    const canvas = card.querySelector(`#printCanvas_${job.Job_ID}`);
+    if (claimUrl && claimUrl !== '#') {
+      QRCode.toCanvas(canvas, claimUrl, { width: 180, margin: 1, color: { dark: '#000', light: '#fff' } });
+    }
+  }
 }
 
 // ════════════════════════════════════════════════════════
