@@ -471,21 +471,35 @@ function doLogout() {
 // ════════════════════════════════════════════════════════
 //  API HELPERS
 // ════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+//  GAS API HELPERS
+//  ทุก request ใช้ GET เท่านั้น เพื่อหลีกเลี่ยง CORS preflight
+//  Write actions ส่ง payload เป็น base64-encoded JSON ใน query string
+// ─────────────────────────────────────────────────────────────
 async function gasGet(action, extra={}) {
   const u = new URL(GAS_URL);
   u.searchParams.set('action', action);
   if (A.token) u.searchParams.set('adminToken', A.token);
-  Object.entries(extra).forEach(([k,v]) => u.searchParams.set(k, v));
-  const r = await fetch(u.toString());
+  Object.entries(extra).forEach(([k,v]) => {
+    if (v !== undefined && v !== null) u.searchParams.set(k, v);
+  });
+  const r = await fetch(u.toString(), { redirect: 'follow' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
 
+// gasPost → ส่งเป็น GET โดย encode body เป็น base64 ใน ?payload=
+// วิธีนี้แก้ปัญหา CORS ของ GAS Web App ได้ 100%
 async function gasPost(action, body={}) {
-  const r = await fetch(GAS_URL, {
-    method : 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body   : JSON.stringify({ action, adminToken: A.token, ...body }),
-  });
+  const u = new URL(GAS_URL);
+  u.searchParams.set('action', action);
+  if (A.token) u.searchParams.set('adminToken', A.token);
+  // Encode payload เป็น base64
+  const jsonStr = JSON.stringify(body);
+  const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+  u.searchParams.set('payload', b64);
+  const r = await fetch(u.toString(), { redirect: 'follow' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
 
