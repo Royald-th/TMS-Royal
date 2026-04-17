@@ -353,19 +353,41 @@ async function initApp() {
 // ════════════════════════════════════════════
 //  API
 // ════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────
+//  GAS API HELPERS — GET-only เพื่อหลีกเลี่ยง CORS
+// ─────────────────────────────────────────────────────────
 async function gasGet(action, params={}) {
   const u = new URL(GAS_URL);
   u.searchParams.set('action', action);
-  u.searchParams.set('accessToken', S.token);
-  Object.entries(params).forEach(([k,v]) => u.searchParams.set(k,v));
-  return (await fetch(u.toString())).json();
+  if (S.token) u.searchParams.set('accessToken', S.token);
+  Object.entries(params).forEach(([k,v]) => { if (v!=null) u.searchParams.set(k,v); });
+  const r = await fetch(u.toString(), { redirect: 'follow' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
 }
+// Driver write actions ยังส่งผ่าน POST ได้ปกติใน LIFF WebView
+// แต่ fallback เป็น GET+base64 ถ้าเกิด error (เผื่อทดสอบใน browser)
 async function gasPost(action, body={}) {
-  return (await fetch(GAS_URL,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ action, userId:S.userId, accessToken:S.token, ...body })
-  })).json();
+  try {
+    const r = await fetch(GAS_URL, {
+      method : 'POST',
+      headers: { 'Content-Type': 'text/plain' },  // text/plain ไม่ trigger CORS preflight
+      body   : JSON.stringify({ action, userId: S.userId, accessToken: S.token, ...body }),
+      redirect: 'follow',
+    });
+    if (!r.ok) throw new Error('POST HTTP ' + r.status);
+    return r.json();
+  } catch (postErr) {
+    // Fallback: ส่งเป็น GET พร้อม base64 payload
+    const u = new URL(GAS_URL);
+    u.searchParams.set('action', action);
+    if (S.token) u.searchParams.set('accessToken', S.token);
+    const jsonStr = JSON.stringify({ ...body, userId: S.userId });
+    u.searchParams.set('payload', btoa(unescape(encodeURIComponent(jsonStr))));
+    const r2 = await fetch(u.toString(), { redirect: 'follow' });
+    if (!r2.ok) throw new Error('GET-fallback HTTP ' + r2.status);
+    return r2.json();
+  }
 }
 
 // ════════════════════════════════════════════
