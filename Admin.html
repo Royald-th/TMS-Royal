@@ -1075,6 +1075,33 @@ function setPrintFilter(f, btn) {
   renderPrintGrid();
 }
 
+  function showQrModal(jobId, claimUrl) {
+  // 1. แสดงเลข Job และข้อมูลเบื้องต้นใน Modal
+  document.getElementById('qrJobSummary').innerHTML = `
+    <div style="font-weight:700; color:var(--grn); font-size:16px;">งาน: ${jobId}</div>
+    <div style="color:var(--sub); font-size:12px;">สถานะ: รอคนขับสแกนรับงาน</div>
+  `;
+  
+  // 2. ใส่ URL ลงในช่อง Text เผื่อก๊อปปี้ลิงก์
+  document.getElementById('qrUrlText').innerText = claimUrl;
+  
+  // 3. ใช้ Library qrcode.min.js วาดรูปลงบน canvas
+  const canvas = document.getElementById('qrCanvas');
+  QRCode.toCanvas(canvas, claimUrl, {
+    width: 250,
+    margin: 2,
+    color: {
+      dark: '#000000',
+      light: '#ffffff'
+    }
+  }, function (error) {
+    if (error) console.error(error);
+  });
+
+  // 4. สั่งเปิด Modal
+  new bootstrap.Modal(document.getElementById('qrModal')).show();
+}
+
 async function openPrintQR(singleJobId) {
   let jobs = singleJobId
     ? A.jobs.filter(j => String(j.Job_ID) === String(singleJobId))
