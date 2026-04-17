@@ -10,6 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <!-- QR Scanner -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
   <style>
     :root{
@@ -132,6 +134,9 @@
 
     /* Modal */
     .msheet{background:var(--sur);border:1px solid var(--bdr);border-radius:16px 16px 0 0;color:var(--txt)}
+    /* Scanner pulse */
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    .scan-pulse{animation:pulse 1.2s ease-in-out infinite}
     #imgPreview{width:100%;border-radius:9px;border:1px solid var(--bdr);display:none;margin-top:8px;max-height:200px;object-fit:cover}
 
     /* Job complete banner */
@@ -204,7 +209,54 @@
   <!-- Bottom Nav -->
   <div class="bnav" id="bnav">
     <div class="bitem active" onclick="switchPage('jobs')"><i class="bi bi-list-task"></i>งาน</div>
+    <div class="bitem" onclick="openScanner()"><i class="bi bi-qr-code-scan"></i>สแกน QR</div>
     <div class="bitem" onclick="switchPage('profile')"><i class="bi bi-person-circle"></i>โปรไฟล์</div>
+  </div>
+</div>
+
+<!-- ── Modal: Claim Job (QR Scan Result) ── -->
+<div class="modal fade" id="claimModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" style="margin:16px;max-width:100%">
+    <div class="modal-content msheet">
+      <div style="padding:16px;border-bottom:1px solid var(--bdr)">
+        <div style="font-weight:700;font-size:16px;margin-bottom:2px">📦 รับงานนี้?</div>
+        <div style="font-size:12px;color:var(--mute)" id="claimJobId">—</div>
+      </div>
+      <div style="padding:16px" id="claimJobBody">
+        <!-- filled dynamically -->
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--bdr);display:flex;gap:8px">
+        <button class="btn-tms btn-outline" style="flex:1" data-bs-dismiss="modal" id="btnClaimCancel">ยกเลิก</button>
+        <button class="btn-tms btn-start"  style="flex:1" id="btnClaimConfirm" onclick="confirmClaim()">
+          <i class="bi bi-check-circle-fill"></i> รับงานเลย
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: QR Scanner ── -->
+<div class="modal fade" id="scannerModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="margin:16px;max-width:100%">
+    <div class="modal-content msheet">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:700">📷 สแกน QR รับงาน</div>
+        <button class="btn-tms btn-outline" style="width:auto;padding:6px 12px;font-size:13px" onclick="stopScanner()" data-bs-dismiss="modal">ปิด</button>
+      </div>
+      <div style="padding:16px">
+        <div style="position:relative;border-radius:12px;overflow:hidden;background:#000">
+          <video id="scanVideo" style="width:100%;display:block;border-radius:12px" playsinline autoplay muted></video>
+          <canvas id="scanCanvas" style="display:none"></canvas>
+          <!-- Crosshair overlay -->
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+            <div style="width:200px;height:200px;border:3px solid var(--grn);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.5)"></div>
+          </div>
+        </div>
+        <div id="scanStatus" style="text-align:center;font-size:13px;color:var(--mute);margin-top:12px;padding:8px">
+          📱 จ่อ QR Code ให้อยู่ในกรอบสีเขียว
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -281,8 +333,20 @@ async function initApp() {
     S.driver = r.driver;
     renderProfile();
     await loadJobs();
-    showPage('jobs');
-    hideLoader();
+
+    // ── ตรวจ ?jobId= จาก URL (มาจากสแกน QR) ────────────────
+    const urlParams = new URLSearchParams(window.location.search);
+    const qrJobId   = urlParams.get('jobId');
+    if (qrJobId) {
+      showPage('jobs');
+      hideLoader();
+      // ล้าง URL เพื่อไม่ให้ trigger ซ้ำเมื่อ refresh
+      window.history.replaceState({}, '', window.location.pathname);
+      await openClaimModal(qrJobId);
+    } else {
+      showPage('jobs');
+      hideLoader();
+    }
   } catch(e) { toast('เกิดข้อผิดพลาด: '+e.message,'error'); hideLoader(); }
 }
 
@@ -293,34 +357,15 @@ async function gasGet(action, params={}) {
   const u = new URL(GAS_URL);
   u.searchParams.set('action', action);
   u.searchParams.set('accessToken', S.token);
-  u.searchParams.set('userId', S.userId); // เพิ่ม userId เข้าไปด้วย
   Object.entries(params).forEach(([k,v]) => u.searchParams.set(k,v));
-  
-  const res = await fetch(u.toString());
-  return res.json();
+  return (await fetch(u.toString())).json();
 }
-
 async function gasPost(action, body={}) {
-  // สร้าง Payload โดยใช้ตัวแปร S ที่คุณประกาศไว้ข้างบน
-  const payload = { 
-    action, 
-    userId: S.userId, 
-    accessToken: S.token, 
-    ...body 
-  };
-
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    mode: 'cors', // มั่นใจว่าเปิด cors
-    headers: {
-      // พยายามไม่ใส่ Content-Type: application/json เพื่อเลี่ยง Preflight ในบางเคส
-      // หรือถ้าใส่ ต้องมั่นใจว่าฝั่ง GAS handle OPTIONS ได้
-      'Content-Type': 'text/plain;charset=utf-8' 
-    },
-    body: JSON.stringify(payload)
-  });
-  
-  return res.json();
+  return (await fetch(GAS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ action, userId:S.userId, accessToken:S.token, ...body })
+  })).json();
 }
 
 // ════════════════════════════════════════════
@@ -621,7 +666,7 @@ function showPage(name){
   const map={jobs:'pageJobs',profile:'pageProfile',register:'pageRegister'};
   document.getElementById(map[name]).classList.add('active');
   document.querySelectorAll('.bitem').forEach((el,i)=>
-    el.classList.toggle('active',(name==='jobs'&&i===0)||(name==='profile'&&i===1))
+    el.classList.toggle('active',(name==='jobs'&&i===0)||(name==='profile'&&i===2))
   );
 }
 function switchPage(name){showPage(name);if(name==='jobs')loadJobs();}
@@ -638,6 +683,189 @@ function toast(msg,type='success'){
   w.appendChild(t);
   setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},3800);
 }
+
+// ════════════════════════════════════════════════════════
+//  CLAIM JOB (QR Flow)
+// ════════════════════════════════════════════════════════
+let _claimJobId = null;
+
+async function openClaimModal(jobId) {
+  _claimJobId = jobId;
+  document.getElementById('claimJobId').textContent = 'งาน #' + jobId;
+
+  const body = document.getElementById('claimJobBody');
+  body.innerHTML = '<div style="text-align:center;padding:20px"><div class="spin" style="margin:0 auto"></div></div>';
+
+  new bootstrap.Modal(document.getElementById('claimModal')).show();
+
+  try {
+    // Fetch job preview (no auth needed)
+    const u = new URL(GAS_URL);
+    u.searchParams.set('action',  'previewJob');
+    u.searchParams.set('jobId',   jobId);
+    const r = await (await fetch(u.toString())).json();
+
+    if (r.status !== 'success') {
+      body.innerHTML = `<div style="text-align:center;color:var(--red);padding:16px"><i class="bi bi-exclamation-triangle" style="font-size:32px;display:block;margin-bottom:8px"></i>${r.message}</div>`;
+      document.getElementById('btnClaimConfirm').disabled = true;
+      return;
+    }
+
+    if (r.alreadyClaimed) {
+      // Check if it's mine
+      const isMine = r.job && A.jobs?.some(j => String(j.Job_ID) === String(jobId));
+      body.innerHTML = `
+        <div style="text-align:center;padding:8px">
+          <div style="font-size:32px;margin-bottom:8px">${isMine ? '✅' : '🔒'}</div>
+          <div style="font-weight:600">${isMine ? 'งานนี้คือของคุณแล้ว' : 'งานนี้ถูกรับไปแล้ว'}</div>
+          <div style="font-size:12px;color:var(--mute);margin-top:6px">งาน #${jobId} · ${r.job?.Scheduled_Time||''}</div>
+        </div>`;
+      document.getElementById('btnClaimConfirm').disabled = true;
+      document.getElementById('btnClaimCancel').textContent = 'ปิด';
+      return;
+    }
+
+    // Show job info
+    const stops = r.stops || [];
+    body.innerHTML = `
+      <div style="margin-bottom:12px">
+        ${r.job?.Scheduled_Time ? `<div style="font-size:12px;color:var(--mute)"><i class="bi bi-calendar"></i> ${r.job.Scheduled_Time}</div>` : ''}
+        ${r.job?.Note ? `<div style="font-size:12px;color:var(--ylw);margin-top:3px"><i class="bi bi-sticky"></i> ${r.job.Note}</div>` : ''}
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${stops.length} จุดส่ง</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${stops.map(s => `
+          <div style="background:var(--sur2);border-radius:8px;padding:9px 12px;display:flex;gap:10px;align-items:flex-start">
+            <div style="width:22px;height:22px;background:var(--grn-d);border:1.5px solid var(--grn);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--grn);flex-shrink:0">${s.Stop_Order}</div>
+            <div>
+              <div style="font-size:13px;font-weight:600">${s.Recipient_Name||'ไม่มีชื่อ'}</div>
+              <div style="font-size:12px;color:var(--mute)">${s.Address||'—'}</div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+    document.getElementById('btnClaimConfirm').disabled = false;
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--red);padding:16px">เกิดข้อผิดพลาด: ${e.message}</div>`;
+    document.getElementById('btnClaimConfirm').disabled = true;
+  }
+}
+
+async function confirmClaim() {
+  if (!_claimJobId || !S.userId) return;
+  const btn = document.getElementById('btnClaimConfirm');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:15px;height:15px;border-width:2px"></div> กำลังรับงาน...';
+
+  try {
+    const r = await gasPost('claimJob', { jobId: _claimJobId });
+    if (r.status !== 'success') throw new Error(r.message);
+
+    bootstrap.Modal.getInstance(document.getElementById('claimModal')).hide();
+    toast(`✅ รับงาน #${_claimJobId} สำเร็จ! (${r.message})`, 'success');
+    _claimJobId = null;
+    await loadJobs();
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> รับงานเลย';
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  QR SCANNER (jsQR)
+// ════════════════════════════════════════════════════════
+let _scanStream   = null;
+let _scanInterval = null;
+let _scanActive   = false;
+
+async function openScanner() {
+  if (!S.driver) { toast('❌ กรุณาลงทะเบียนก่อนสแกน QR', 'error'); return; }
+  _scanActive = true;
+  document.getElementById('scanStatus').innerHTML = '📱 จ่อ QR Code ให้อยู่ในกรอบสีเขียว';
+
+  try {
+    _scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById('scanVideo');
+    video.srcObject = _scanStream;
+    await video.play();
+    new bootstrap.Modal(document.getElementById('scannerModal')).show();
+
+    // Start scanning loop
+    const canvas = document.getElementById('scanCanvas');
+    const ctx    = canvas.getContext('2d');
+    _scanInterval = setInterval(() => {
+      if (!_scanActive || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code    = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+      if (code) {
+        handleQrResult(code.data);
+      }
+    }, 300);
+  } catch(e) {
+    toast('❌ ไม่สามารถเปิดกล้องได้: ' + e.message, 'error');
+    stopScanner();
+  }
+}
+
+function stopScanner() {
+  _scanActive = false;
+  clearInterval(_scanInterval);
+  if (_scanStream) { _scanStream.getTracks().forEach(t => t.stop()); _scanStream = null; }
+}
+
+function handleQrResult(data) {
+  // หยุดสแกน
+  stopScanner();
+
+  const statusEl = document.getElementById('scanStatus');
+  statusEl.innerHTML = '<div class="scan-pulse" style="color:var(--grn)">✅ อ่าน QR สำเร็จ — กำลังดึงข้อมูลงาน...</div>';
+
+  // ดึง jobId จาก URL หรือ plain text
+  let jobId = null;
+  try {
+    const url = new URL(data);
+    jobId = url.searchParams.get('jobId');
+  } catch {
+    // ถ้าไม่ใช่ URL ให้ลองใช้ตรงๆ
+    if (/^JOB\d+$/i.test(data.trim())) jobId = data.trim().toUpperCase();
+  }
+
+  if (!jobId) {
+    statusEl.innerHTML = '<span style="color:var(--red)">❌ QR นี้ไม่ใช่ของระบบ TMS</span>';
+    setTimeout(() => { _scanActive = true; _restartScan(); }, 2000);
+    return;
+  }
+
+  // ปิด scanner modal แล้วเปิด claim modal
+  bootstrap.Modal.getInstance(document.getElementById('scannerModal')).hide();
+  setTimeout(() => openClaimModal(jobId), 400);
+}
+
+function _restartScan() {
+  // Re-enable scanning after delay
+  const canvas  = document.getElementById('scanCanvas');
+  const video   = document.getElementById('scanVideo');
+  const ctx     = canvas.getContext('2d');
+  _scanInterval = setInterval(() => {
+    if (!_scanActive || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code    = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+    if (code) handleQrResult(code.data);
+  }, 300);
+}
+
+// Clean up scanner when modal closes
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('scannerModal')?.addEventListener('hidden.bs.modal', stopScanner);
+});
 
 window.addEventListener('DOMContentLoaded', initApp);
 </script>
